@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1.25.0
+
+FROM registry.suse.com/bci/bci-base:16.1
+
+RUN zypper -n rm container-suseconnect && \
+    zypper -n in curl jq
+
+ARG TARGETPLATFORM
+
+RUN if [ "$TARGETPLATFORM" != "linux/amd64" ] && [ "$TARGETPLATFORM" != "linux/arm64" ]; then \
+    echo "Error: Unsupported TARGETPLATFORM: $TARGETPLATFORM" && \
+    exit 1; \
+    fi
+
+ENV ARCH=${TARGETPLATFORM#linux/}
+
+COPY --from=bin resource-health-controller-${ARCH} /usr/bin/resource-health-controller
+
+ENTRYPOINT [ "resource-health-controller" ]

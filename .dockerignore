@@ -1,0 +1,9 @@
+/build
+/.cache
+/bin
+*.swp
+.idea
+*.DS_Store
+/.vscode
+/.docker
+.git
