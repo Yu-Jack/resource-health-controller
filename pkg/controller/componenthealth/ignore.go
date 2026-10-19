@@ -1,0 +1,125 @@
+package componenthealth
+
+import (
+	"sort"
+	"time"
+
+	"k8s.io/apimachinery/pkg/labels"
+
+	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+)
+
+var severityRank = map[healthv1.Severity]int{
+	healthv1.SeverityInfo:    0,
+	healthv1.SeverityWarning: 1,
+	healthv1.SeverityError:   2,
+}
+
+// ValidSeverity reports whether severity is one of the known severities.
+func ValidSeverity(severity healthv1.Severity) bool {
+	_, ok := severityRank[severity]
+	return ok
+}
+
+// listIgnoreRules returns the rules that target the given ComponentHealth, sorted by name so the result is deterministic.
+func (h *Handler) listIgnoreRules(componentHealthName string) ([]*healthv1.HealthIgnoreRule, error) {
+	if h.ignoreRuleCache == nil {
+		return nil, nil
+	}
+	all, err := h.ignoreRuleCache.List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	rules := make([]*healthv1.HealthIgnoreRule, 0, len(all))
+	for _, rule := range all {
+		if rule.Spec.ComponentHealth == componentHealthName {
+			rules = append(rules, rule)
+		}
+	}
+	sort.Slice(rules, func(i, j int) bool { return rules[i].Name < rules[j].Name })
+	return rules, nil
+}
+
+// applyIgnoreRules returns a copy of checks in which the ignored checks and resources are marked.
+//
+// The marks are always derived from scratch: any mark carried by checks is cleared first, so a removed or
+// expired rule un-ignores the check. The result only depends on its inputs (now is only compared against
+// the rule expiry), which keeps the "unchanged, skip the write" comparison of the caller convergent.
+//
+// The returned expiry is the earliest time at which a rule that currently takes effect stops doing so,
+// nil if there is none, the caller has to reconcile again at that time.
+func applyIgnoreRules(checks map[string]healthv1.CheckResult, rules []*healthv1.HealthIgnoreRule, minSeverity healthv1.Severity, now time.Time) (map[string]healthv1.CheckResult, *time.Time) {
+	var nextExpiry *time.Time
+	result := make(map[string]healthv1.CheckResult, len(checks))
+
+	for key, original := range checks {
+		check := *original.DeepCopy()
+		check.Ignored = false
+		check.IgnoredBy = ""
+		if check.AffectedResources != nil {
+			for name := range check.AffectedResources.Names {
+				check.AffectedResources.Names[name] = healthv1.AffectedResourceDetail{}
+			}
+		}
+
+		if minSeverity != "" && severityRank[check.Severity] < severityRank[minSeverity] {
+			check.Ignored = true
+			check.IgnoredBy = healthv1.IgnoredByMinSeverity
+			result[key] = check
+			continue
+		}
+
+		var firstRule string
+		for _, rule := range rules {
+			if rule.Spec.CheckKey != key {
+				continue
+			}
+			if expiresAt := rule.Spec.ExpiresAt; expiresAt != nil {
+				if !expiresAt.After(now) {
+					continue
+				}
+				if nextExpiry == nil || expiresAt.Time.Before(*nextExpiry) {
+					t := expiresAt.Time
+					nextExpiry = &t
+				}
+			}
+
+			if len(rule.Spec.Resources) == 0 {
+				check.Ignored = true
+				check.IgnoredBy = rule.Name
+				break
+			}
+			if check.AffectedResources == nil {
+				continue
+			}
+			for _, name := range rule.Spec.Resources {
+				if detail, ok := check.AffectedResources.Names[name]; ok && !detail.Ignored {
+					check.AffectedResources.Names[name] = healthv1.AffectedResourceDetail{Ignored: true, IgnoredBy: rule.Name}
+					if firstRule == "" {
+						firstRule = rule.Name
+					}
+				}
+			}
+		}
+
+		// a check is ignored as a whole once every affected resource of it is ignored
+		if !check.Ignored && firstRule != "" && allResourcesIgnored(check.AffectedResources) {
+			check.Ignored = true
+			check.IgnoredBy = firstRule
+		}
+		result[key] = check
+	}
+	return result, nextExpiry
+}
+
+func allResourcesIgnored(resources *healthv1.AffectedResources) bool {
+	if resources == nil || len(resources.Names) == 0 {
+		return false
+	}
+	for _, detail := range resources.Names {
+		if !detail.Ignored {
+			return false
+		}
+	}
+	return true
+}
