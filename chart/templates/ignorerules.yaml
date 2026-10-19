@@ -1,0 +1,19 @@
+{{- range .Values.defaultIgnoreRules }}
+---
+apiVersion: health.harvesterhci.io/v1beta1
+kind: HealthIgnoreRule
+metadata:
+  name: {{ required "defaultIgnoreRules[].name is required" .name }}
+  labels:
+    health.harvesterhci.io/source: default
+spec:
+  componentHealth: {{ required "defaultIgnoreRules[].componentHealth is required" .componentHealth }}
+  checkKey: {{ required "defaultIgnoreRules[].checkKey is required" .checkKey }}
+  {{- with .resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .reason }}
+  reason: {{ . | quote }}
+  {{- end }}
+{{- end }}
