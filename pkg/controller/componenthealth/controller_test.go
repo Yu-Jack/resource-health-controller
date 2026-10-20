@@ -137,6 +137,10 @@ func TestOnComponentHealthChangedDispatch(t *testing.T) {
 			for _, action := range healthset.Actions() {
 				assert.False(t, action.Matches("update", "componenthealths"))
 			}
+			healths, err := healthset.HealthV1beta1().ComponentHealths().List(context.Background(), metav1.ListOptions{})
+			if assert.NoError(t, err) {
+				assert.Len(t, healths.Items, 1)
+			}
 		})
 	}
 }
@@ -148,13 +152,23 @@ func TestOnComponentHealthChangedWaitsForCaches(t *testing.T) {
 			func() bool { return false },
 		},
 	}
-	result, err := handler.OnComponentHealthChanged(vmBackupComponentHealthName, nil)
-	assert.Nil(t, result)
-	assert.EqualError(t, err, "ComponentHealth resource caches are not synced")
+	for _, component := range componentReconcilers {
+		t.Run(component.name, func(t *testing.T) {
+			health := &healthv1.ComponentHealth{ObjectMeta: metav1.ObjectMeta{Name: component.name}}
+			result, err := handler.OnComponentHealthChanged(component.name, health)
+			assert.Same(t, health, result)
+			assert.EqualError(t, err, "ComponentHealth resource caches are not synced")
+		})
+	}
 }
 
 func TestOnComponentHealthChangedIgnoresUnownedKeys(t *testing.T) {
-	handler := &Handler{}
+	handler := &Handler{
+		healthCachesSynced: []cache.InformerSynced{func() bool {
+			t.Fatal("unowned keys must not check cache synchronization")
+			return false
+		}},
+	}
 	health := &healthv1.ComponentHealth{ObjectMeta: metav1.ObjectMeta{Name: "other-component"}}
 	result, err := handler.OnComponentHealthChanged(health.Name, health)
 	assert.Same(t, health, result)

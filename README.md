@@ -16,8 +16,10 @@ See the HEP `enhancements/20260915-resource-health-dashboard.md` in `harvester/h
 
 1. Each watched resource `OnChange` handler only enqueues the key of the `ComponentHealth` CR that owns that resource kind.
 2. The workqueue de-duplicates the keys, so a burst of events collapses into a single reconcile.
-3. `OnComponentHealthChanged(key)` dispatches by key to `reconcileXxx()`, which recomputes the checks from the informer
-   cache and writes them to the `ComponentHealth` CR only when they changed.
+3. `OnComponentHealthChanged(key)` dispatches by key through the ordered `componentReconcilers` registry to
+   `reconcileXxx()`, which recomputes the checks from the informer cache and writes them to the `ComponentHealth` CR
+   only when they changed. The same registry supplies the keys for startup and full-health enqueues, so adding a
+   component requires only one registry entry for both dispatch and enqueue.
 4. The summary controller watches every `ComponentHealth`, groups them by the `health.harvesterhci.io/component`
    label and upserts `HealthSummary/cluster`.
 

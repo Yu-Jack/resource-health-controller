@@ -29,6 +29,18 @@ const (
 	volumeComponentHealthName = "harvester-controller-volume"
 )
 
+var componentReconcilers = []struct {
+	name      string
+	reconcile func(*Handler) error
+}{
+	{nodeComponentHealthName, (*Handler).reconcileNodes},
+	{vmComponentHealthName, (*Handler).reconcileVMI},
+	{volumeComponentHealthName, (*Handler).reconcileVolumes},
+	{vmBackupComponentHealthName, (*Handler).reconcileVMBackups},
+	{scheduleVMBackupComponentHealthName, (*Handler).reconcileScheduleVMBackups},
+	{vmImageComponentHealthName, (*Handler).reconcileVMImages},
+}
+
 type Handler struct {
 	componentHealthController ctlhealthv1.ComponentHealthController
 	healthCachesSynced        []cache.InformerSynced
@@ -108,42 +120,24 @@ func (h *Handler) enqueueInitialHealth(ctx context.Context) {
 }
 
 func (h *Handler) enqueueAllHealth() {
-	for _, name := range []string{
-		nodeComponentHealthName,
-		vmComponentHealthName,
-		volumeComponentHealthName,
-		vmBackupComponentHealthName,
-		scheduleVMBackupComponentHealthName,
-		vmImageComponentHealthName,
-	} {
-		h.enqueueHealth(name)
+	for _, component := range componentReconcilers {
+		h.enqueueHealth(component.name)
 	}
 }
 
 func (h *Handler) OnComponentHealthChanged(key string, health *healthv1.ComponentHealth) (*healthv1.ComponentHealth, error) {
-	var reconcile func() error
-	switch key {
-	case nodeComponentHealthName:
-		reconcile = h.reconcileNodes
-	case vmComponentHealthName:
-		reconcile = h.reconcileVMI
-	case volumeComponentHealthName:
-		reconcile = h.reconcileVolumes
-	case vmBackupComponentHealthName:
-		reconcile = h.reconcileVMBackups
-	case scheduleVMBackupComponentHealthName:
-		reconcile = h.reconcileScheduleVMBackups
-	case vmImageComponentHealthName:
-		reconcile = h.reconcileVMImages
-	default:
-		return health, nil
-	}
-	for _, synced := range h.healthCachesSynced {
-		if !synced() {
-			return health, fmt.Errorf("ComponentHealth resource caches are not synced")
+	for _, component := range componentReconcilers {
+		if component.name != key {
+			continue
 		}
+		for _, synced := range h.healthCachesSynced {
+			if !synced() {
+				return health, fmt.Errorf("ComponentHealth resource caches are not synced")
+			}
+		}
+		return health, component.reconcile(h)
 	}
-	return health, reconcile()
+	return health, nil
 }
 
 // replaceComponentHealthChecks replaces all the checks of a ComponentHealth that is owned by a single
