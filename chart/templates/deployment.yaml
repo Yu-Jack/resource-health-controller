@@ -35,10 +35,6 @@ spec:
           - {{ include "harvester-resource-health-controller.fullname" . }}
           - --threadiness
           - "{{ .Values.threadiness }}"
-          {{- with .Values.minSeverity }}
-          - --min-severity
-          - {{ . | quote }}
-          {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

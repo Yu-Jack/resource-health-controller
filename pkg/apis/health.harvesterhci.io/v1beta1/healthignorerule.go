@@ -5,13 +5,8 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 const (
 	// LabelKeyIgnoreRuleSource tells who created a HealthIgnoreRule.
 	LabelKeyIgnoreRuleSource = "health.harvesterhci.io/source"
-	// IgnoreRuleSourceDefault marks the rules rendered from the addon values, they are managed by Helm.
-	IgnoreRuleSourceDefault = "default"
 	// IgnoreRuleSourceUser marks the rules created by users, e.g. from the dashboard.
 	IgnoreRuleSourceUser = "user"
-
-	// IgnoredByMinSeverity is the IgnoredBy value of the checks hidden by the addon minSeverity setting.
-	IgnoredByMinSeverity = "min-severity"
 )
 
 // +genclient

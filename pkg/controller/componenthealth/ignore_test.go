@@ -54,7 +54,6 @@ func TestApplyIgnoreRules(t *testing.T) {
 	tests := []struct {
 		name           string
 		rules          []*healthv1.HealthIgnoreRule
-		minSeverity    healthv1.Severity
 		expectIgnored  bool
 		expectedBy     string
 		expectedNames  map[string]healthv1.AffectedResourceDetail
@@ -122,23 +121,11 @@ func TestApplyIgnoreRules(t *testing.T) {
 			},
 			expectedExpiry: &future,
 		},
-		{
-			name:          "min severity ignores lower severity",
-			minSeverity:   healthv1.SeverityError,
-			expectIgnored: true,
-			expectedBy:    healthv1.IgnoredByMinSeverity,
-			expectedNames: map[string]healthv1.AffectedResourceDetail{"a": {}, "b": {}},
-		},
-		{
-			name:          "min severity keeps the same severity",
-			minSeverity:   healthv1.SeverityWarning,
-			expectedNames: map[string]healthv1.AffectedResourceDetail{"a": {}, "b": {}},
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			checks := newTestChecks(healthv1.SeverityWarning, "a", "b")
-			result, expiry := applyIgnoreRules(checks, tc.rules, tc.minSeverity, now)
+			result, expiry := applyIgnoreRules(checks, tc.rules, now)
 
 			check := result[testCheckKey]
 			assert.Equal(t, tc.expectIgnored, check.Ignored)
@@ -165,7 +152,7 @@ func TestApplyIgnoreRulesClearsStaleMarks(t *testing.T) {
 	stale.AffectedResources.Names["a"] = healthv1.AffectedResourceDetail{Ignored: true, IgnoredBy: "deleted-rule"}
 	checks[testCheckKey] = stale
 
-	result, _ := applyIgnoreRules(checks, nil, "", time.Now())
+	result, _ := applyIgnoreRules(checks, nil, time.Now())
 
 	assert.Equal(t, newTestChecks(healthv1.SeverityWarning, "a"), result)
 }

@@ -43,7 +43,7 @@ type CheckResult struct {
 	// Ignored is true when the whole check is ignored, it does not count in the HealthSummary then.
 	// +optional
 	Ignored bool `json:"ignored,omitempty"`
-	// IgnoredBy is the name of the HealthIgnoreRule (or IgnoredByMinSeverity) that ignores the check.
+	// IgnoredBy is the name of the HealthIgnoreRule that ignores the check.
 	// +optional
 	IgnoredBy string `json:"ignoredBy,omitempty"`
 }

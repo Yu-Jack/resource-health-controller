@@ -53,8 +53,6 @@ type Handler struct {
 	scheduleVMBackupCache     ctlharvesterv1.ScheduleVMBackupCache
 	vmImageCache              ctlharvesterv1.VirtualMachineImageCache
 	ignoreRuleCache           ctlhealthv1.HealthIgnoreRuleCache
-	// minSeverity hides the checks below this severity, empty shows all of them.
-	minSeverity healthv1.Severity
 }
 
 func Register(ctx context.Context, management *config.Management) error {
@@ -87,7 +85,6 @@ func Register(ctx context.Context, management *config.Management) error {
 		scheduleVMBackupCache: scheduleVMBackups.Cache(),
 		vmImageCache:          vmImages.Cache(),
 		ignoreRuleCache:       ignoreRules.Cache(),
-		minSeverity:           management.MinSeverity,
 	}
 
 	// the only place checks are computed: dispatch by ComponentHealth key
@@ -212,7 +209,7 @@ func (h *Handler) updateComponentHealthChecksWithFilter(componentHealthName stri
 	if err != nil {
 		return fmt.Errorf("failed to list HealthIgnoreRules: %w", err)
 	}
-	updatedChecks, nextExpiry := applyIgnoreRules(updatedChecks, rules, h.minSeverity, time.Now())
+	updatedChecks, nextExpiry := applyIgnoreRules(updatedChecks, rules, time.Now())
 	if nextExpiry != nil {
 		// nothing else triggers a reconcile when a rule expires
 		h.componentHealthController.EnqueueAfter(componentHealthName, time.Until(*nextExpiry))

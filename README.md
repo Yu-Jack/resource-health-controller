@@ -49,7 +49,7 @@ kind: HealthIgnoreRule
 metadata:
   name: ignore-volume-pvc-aaa
   labels:
-    health.harvesterhci.io/source: user   # default: managed by the Helm values
+    health.harvesterhci.io/source: user
 spec:
   componentHealth: harvester-controller-volume   # name of the ComponentHealth
   checkKey: ReplicaSchedulingFailure             # key in status.checks
@@ -61,9 +61,6 @@ spec:
 - Only the controller writes `ComponentHealth.status`; the dashboard only creates or deletes rules.
 - A rule is matched with `spec.componentHealth`, labels are not used by the controller.
 - A rule change reconciles every `ComponentHealth`, and an expiring rule schedules a reconcile at `expiresAt`.
-- `minSeverity` (Helm value, `--min-severity`) hides the checks below the severity (`ignoredBy: min-severity`).
-- `defaultIgnoreRules` (Helm value) renders rules labeled `source=default`.
-
 ## Develop
 
 The build system is a single `Dockerfile` driven by `make` (no Dapper). Docker with buildx is the only requirement.

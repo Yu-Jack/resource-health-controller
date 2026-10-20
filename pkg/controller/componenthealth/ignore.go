@@ -9,18 +9,6 @@ import (
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
 )
 
-var severityRank = map[healthv1.Severity]int{
-	healthv1.SeverityInfo:    0,
-	healthv1.SeverityWarning: 1,
-	healthv1.SeverityError:   2,
-}
-
-// ValidSeverity reports whether severity is one of the known severities.
-func ValidSeverity(severity healthv1.Severity) bool {
-	_, ok := severityRank[severity]
-	return ok
-}
-
 // listIgnoreRules returns the rules that target the given ComponentHealth, sorted by name so the result is deterministic.
 func (h *Handler) listIgnoreRules(componentHealthName string) ([]*healthv1.HealthIgnoreRule, error) {
 	if h.ignoreRuleCache == nil {
@@ -48,7 +36,7 @@ func (h *Handler) listIgnoreRules(componentHealthName string) ([]*healthv1.Healt
 //
 // The returned expiry is the earliest time at which a rule that currently takes effect stops doing so,
 // nil if there is none, the caller has to reconcile again at that time.
-func applyIgnoreRules(checks map[string]healthv1.CheckResult, rules []*healthv1.HealthIgnoreRule, minSeverity healthv1.Severity, now time.Time) (map[string]healthv1.CheckResult, *time.Time) {
+func applyIgnoreRules(checks map[string]healthv1.CheckResult, rules []*healthv1.HealthIgnoreRule, now time.Time) (map[string]healthv1.CheckResult, *time.Time) {
 	var nextExpiry *time.Time
 	result := make(map[string]healthv1.CheckResult, len(checks))
 
@@ -60,13 +48,6 @@ func applyIgnoreRules(checks map[string]healthv1.CheckResult, rules []*healthv1.
 			for name := range check.AffectedResources.Names {
 				check.AffectedResources.Names[name] = healthv1.AffectedResourceDetail{}
 			}
-		}
-
-		if minSeverity != "" && severityRank[check.Severity] < severityRank[minSeverity] {
-			check.Ignored = true
-			check.IgnoredBy = healthv1.IgnoredByMinSeverity
-			result[key] = check
-			continue
 		}
 
 		var firstRule string

@@ -17,7 +17,6 @@ var (
 	name             string
 	noLeaderElection bool
 	threadiness      int
-	minSeverity      string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -58,7 +57,6 @@ func init() {
 	rootCmd.Flags().StringVar(&name, "name", os.Getenv("RESOURCE_HEALTH_CONTROLLER_NAME"), "The name of the resource-health-controller instance")
 	rootCmd.Flags().BoolVar(&noLeaderElection, "no-leader-election", false, "Run resource-health-controller with leader-election disabled")
 	rootCmd.Flags().IntVar(&threadiness, "threadiness", 10, "The number of workers processing the ComponentHealth workqueue")
-	rootCmd.Flags().StringVar(&minSeverity, "min-severity", os.Getenv("RESOURCE_HEALTH_CONTROLLER_MIN_SEVERITY"), "Ignore the checks below this severity (Info, Warning or Error), empty reports all of them")
 }
 
 // execute adds all child commands to the root command and sets flags appropriately.

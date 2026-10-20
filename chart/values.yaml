@@ -11,19 +11,6 @@ image:
 # Number of workers processing the ComponentHealth workqueue.
 threadiness: 10
 
-# Hide the checks below this severity (Info, Warning or Error). Empty reports all of them.
-minSeverity: ""
-
-# HealthIgnoreRules shipped with the addon, e.g. to silence a known harmless check.
-# They are labeled health.harvesterhci.io/source=default and managed by Helm; the rules
-# created by users (source=user) are never touched.
-defaultIgnoreRules: []
-#  - name: ignore-example
-#    componentHealth: harvester-controller-volume
-#    checkKey: SomeReason
-#    resources: []   # optional, the whole check is ignored when empty
-#    reason: "known harmless"
-
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""

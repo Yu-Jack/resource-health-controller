@@ -72,8 +72,8 @@ spec:
                         it does not count in the HealthSummary then.
                       type: boolean
                     ignoredBy:
-                      description: IgnoredBy is the name of the HealthIgnoreRule (or
-                        IgnoredByMinSeverity) that ignores the check.
+                      description: IgnoredBy is the name of the HealthIgnoreRule that
+                        ignores the check.
                       type: string
                     message:
                       type: string

@@ -59,9 +59,6 @@ type Management struct {
 
 	ClientSet *kubernetes.Clientset
 
-	// MinSeverity hides the checks below this severity, empty shows all of them.
-	MinSeverity healthv1.Severity
-
 	starters []start.Starter
 }
 

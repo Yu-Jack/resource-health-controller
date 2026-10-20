@@ -9,10 +9,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 
-	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
 	"github.com/harvester/resource-health-controller/pkg/config"
 	"github.com/harvester/resource-health-controller/pkg/controller"
-	"github.com/harvester/resource-health-controller/pkg/controller/componenthealth"
 )
 
 func run() error {
@@ -38,11 +36,6 @@ func run() error {
 	if err != nil {
 		logrus.Fatalf("Error building controllers: %s", err.Error())
 	}
-
-	if minSeverity != "" && !componenthealth.ValidSeverity(healthv1.Severity(minSeverity)) {
-		logrus.Fatalf("invalid --min-severity %q, must be one of Info, Warning or Error", minSeverity)
-	}
-	management.MinSeverity = healthv1.Severity(minSeverity)
 
 	callback := func(ctx context.Context) {
 		if err := management.Register(ctx, cfg, controller.RegisterFuncList); err != nil {

@@ -97,7 +97,7 @@ func TestReconcileSummarySkipsIgnoredChecks(t *testing.T) {
 		newComponentHealth("harvester-controller-volume", "harvester-controller", map[string]healthv1.CheckResult{
 			"ReplicaSchedulingFailure": {Severity: healthv1.SeverityWarning, Ignored: true, IgnoredBy: "rule"},
 			"RestoreFailure":           {Severity: healthv1.SeverityWarning},
-			"SomethingBroken":          {Severity: healthv1.SeverityError, Ignored: true, IgnoredBy: healthv1.IgnoredByMinSeverity},
+			"SomethingBroken":          {Severity: healthv1.SeverityError, Ignored: true, IgnoredBy: "rule"},
 		}),
 	)
 	h := &Handler{
