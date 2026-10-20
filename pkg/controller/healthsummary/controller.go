@@ -86,7 +86,7 @@ func (h *Handler) updateHealthSummary(components map[string]healthv1.ComponentSu
 		_, err = h.healthSummaries.Create(&healthv1.HealthSummary{
 			ObjectMeta: metav1.ObjectMeta{Name: summaryName},
 			Status: healthv1.HealthSummaryStatus{
-				LastCheckedAt: metav1.Now(),
+				LastUpdatedAt: metav1.Now(),
 				Components:    components,
 			},
 		})
@@ -98,7 +98,7 @@ func (h *Handler) updateHealthSummary(components map[string]healthv1.ComponentSu
 	}
 
 	toUpdate := existing.DeepCopy()
-	toUpdate.Status.LastCheckedAt = metav1.Now()
+	toUpdate.Status.LastUpdatedAt = metav1.Now()
 	toUpdate.Status.Components = components
 	_, err = h.healthSummaries.Update(toUpdate)
 	return err

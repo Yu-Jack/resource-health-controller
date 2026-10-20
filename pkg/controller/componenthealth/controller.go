@@ -178,7 +178,7 @@ func (h *Handler) updateComponentHealthChecksWithFilter(componentHealthName stri
 				},
 			},
 			Status: healthv1.ComponentHealthStatus{
-				LastCheckedAt: metav1.Now(),
+				LastUpdatedAt: metav1.Now(),
 				Checks:        checks,
 			},
 		})
@@ -232,7 +232,7 @@ func (h *Handler) updateComponentHealthChecksWithFilter(componentHealthName stri
 		toUpdate.Labels = map[string]string{}
 	}
 	toUpdate.Labels[healthv1.LabelKeyComponent] = componentName
-	toUpdate.Status.LastCheckedAt = metav1.Now()
+	toUpdate.Status.LastUpdatedAt = metav1.Now()
 	toUpdate.Status.Checks = updatedChecks
 	_, err = h.componentHealths.Update(toUpdate)
 	if err != nil {

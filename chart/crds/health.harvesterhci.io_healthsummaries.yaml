@@ -52,7 +52,7 @@ spec:
                   - warningCount
                   type: object
                 type: object
-              lastCheckedAt:
+              lastUpdatedAt:
                 format: date-time
                 type: string
             type: object
