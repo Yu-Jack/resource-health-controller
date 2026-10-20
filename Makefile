@@ -35,7 +35,7 @@ DOCKER_BUILD = docker build $(MK_DOCKER_PULL) \
 
 .DEFAULT_GOAL := ci
 
-.PHONY: build validate test generate-manifest package ci gen-version-env clean clean-all run-controller
+.PHONY: build validate test generate generate-manifest package ci gen-version-env clean clean-all run-controller
 
 # ---- gen-version-env ----
 gen-version-env:
@@ -59,6 +59,12 @@ validate: gen-version-env
 test: gen-version-env
 	$(BANNER)
 	$(DOCKER_BUILD) --target test
+
+# ---- generate ----
+generate: gen-version-env
+	$(BANNER)
+	$(DOCKER_BUILD) --target generate-output \
+	    --output type=local,dest=$(ROOT)
 
 # ---- generate-manifest ----
 generate-manifest: gen-version-env

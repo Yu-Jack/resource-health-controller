@@ -73,10 +73,11 @@ make ci              # validate (golangci-lint) + build + test, all inside the b
 make build           # binaries into ./bin
 make test
 make validate
+make generate        # deepcopy / clients / CRD manifests / bindata, inside the builder image
 make generate-manifest   # CRD manifests into ./chart/crds
 make package         # container image from ./bin
 
-# regenerate deepcopy / clients / CRD manifests / bindata (needs controller-gen in PATH)
+# alternatively, regenerate locally (needs Go and controller-gen in PATH)
 go generate ./...
 
 # run against the cluster in your kubeconfig

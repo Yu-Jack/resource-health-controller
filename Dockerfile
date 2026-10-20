@@ -43,6 +43,19 @@ RUN --mount=type=cache,target=/go/pkg/mod,id=resource-health-controller-go-mod-$
     --mount=type=cache,target=/go/src/github.com/harvester/resource-health-controller/.cache/go-build,id=resource-health-controller-go-build-${MK_REPO_ID} \
     ./scripts/test
 
+# ---- generate ----
+FROM base AS generate
+ARG MK_REPO_ID
+RUN --mount=type=cache,target=/go/pkg/mod,id=resource-health-controller-go-mod-${MK_REPO_ID} \
+    --mount=type=cache,target=/go/src/github.com/harvester/resource-health-controller/.cache/go-build,id=resource-health-controller-go-build-${MK_REPO_ID} \
+    go generate ./...
+
+FROM scratch AS generate-output
+COPY --from=generate /go/src/github.com/harvester/resource-health-controller/pkg/apis/ /pkg/apis/
+COPY --from=generate /go/src/github.com/harvester/resource-health-controller/pkg/generated/ /pkg/generated/
+COPY --from=generate /go/src/github.com/harvester/resource-health-controller/pkg/data/ /pkg/data/
+COPY --from=generate /go/src/github.com/harvester/resource-health-controller/chart/crds/ /chart/crds/
+
 # ---- generate-manifest ----
 FROM base AS generate-manifest
 RUN ./scripts/generate-manifest
