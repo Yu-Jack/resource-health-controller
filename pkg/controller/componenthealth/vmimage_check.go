@@ -54,10 +54,7 @@ func (h *Handler) reconcileVMImages() error {
 		check.Message = fmt.Sprintf("%d VirtualMachineImage(s): %s", check.AffectedCount, strings.Join(getSortedMessages(messages[key]), "; "))
 		checks[key] = check
 	}
-	return h.updateComponentHealthChecks(vmImageComponentHealthName, checks, []string{
-		checkKeyImageRetryLimitExceeded, checkKeyImageUploadFailed, checkKeyImageImportFailed,
-		checkKeyImageInitializationFailed, checkKeyImageRetryingAfterFailure, checkKeyImageBackingImageMissing,
-	})
+	return h.replaceComponentHealthChecks(vmImageComponentHealthName, checks)
 }
 
 func vmImageFailure(image *harvesterv1.VirtualMachineImage) (string, healthv1.Severity, condition.Cond) {

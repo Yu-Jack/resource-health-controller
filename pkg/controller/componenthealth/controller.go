@@ -137,31 +137,11 @@ func (h *Handler) OnComponentHealthChanged(key string, health *healthv1.Componen
 	return health, nil
 }
 
-// replaceComponentHealthChecks replaces all the checks of a ComponentHealth that is owned by a single
+// replaceComponentHealthChecks replaces all the checks of a ComponentHealth, which is owned by a single
 // reconcile function, so checks that no longer apply are removed as well.
-func (h *Handler) replaceComponentHealthChecks(componentHealthName string, checks map[string]healthv1.CheckResult) error {
-	return h.updateComponentHealthChecksWithFilter(componentHealthName, checks, func(string, healthv1.CheckResult) bool {
-		return true
-	})
-}
-
-// updateComponentHealthChecks replaces the entries named in ownedKeys with checks.
-func (h *Handler) updateComponentHealthChecks(componentHealthName string, checks map[string]healthv1.CheckResult, ownedKeys []string) error {
-	ownedKeySet := make(map[string]struct{}, len(ownedKeys))
-	for _, key := range ownedKeys {
-		ownedKeySet[key] = struct{}{}
-	}
-	return h.updateComponentHealthChecksWithFilter(componentHealthName, checks, func(key string, _ healthv1.CheckResult) bool {
-		_, ok := ownedKeySet[key]
-		return ok
-	})
-}
-
-// updateComponentHealthChecksWithFilter replaces the existing entries matched by ownedCheck with checks,
-// so one check function never clobbers another check function's entries within the same ComponentHealth.
 // It skips the write entirely if the resulting checks are unchanged, which is what makes the
 // reconcile loop converge.
-func (h *Handler) updateComponentHealthChecksWithFilter(componentHealthName string, checks map[string]healthv1.CheckResult, ownedCheck func(string, healthv1.CheckResult) bool) error {
+func (h *Handler) replaceComponentHealthChecks(componentHealthName string, checks map[string]healthv1.CheckResult) error {
 	existing, err := h.componentHealths.Get(componentHealthName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -190,26 +170,11 @@ func (h *Handler) updateComponentHealthChecksWithFilter(componentHealthName stri
 		existing = created
 	}
 
-	updatedChecks := make(map[string]healthv1.CheckResult, len(existing.Status.Checks)+len(checks))
-	for key, check := range existing.Status.Checks {
-		updatedChecks[key] = check
-	}
-	for key, check := range existing.Status.Checks {
-		if ownedCheck(key, check) {
-			delete(updatedChecks, key)
-		}
-	}
-	for key, check := range checks {
-		updatedChecks[key] = check
-	}
-
-	// the ignore marks are applied on the merged checks, so the checks kept from the other check functions
-	// of the same ComponentHealth are marked too
 	rules, err := h.listIgnoreRules(componentHealthName)
 	if err != nil {
 		return fmt.Errorf("failed to list HealthIgnoreRules: %w", err)
 	}
-	updatedChecks, nextExpiry := applyIgnoreRules(updatedChecks, rules, time.Now())
+	updatedChecks, nextExpiry := applyIgnoreRules(checks, rules, time.Now())
 	if nextExpiry != nil {
 		// nothing else triggers a reconcile when a rule expires
 		h.componentHealthController.EnqueueAfter(componentHealthName, time.Until(*nextExpiry))
