@@ -42,19 +42,6 @@ func (h *Handler) reconcileNodes() error {
 }
 
 func buildNodeCordonedCheckResult(names []string) healthv1.CheckResult {
-	nameMap := make(map[string]healthv1.AffectedResourceDetail, len(names))
-	for _, name := range names {
-		nameMap[name] = healthv1.AffectedResourceDetail{}
-	}
-
-	return healthv1.CheckResult{
-		Severity:      healthv1.SeverityInfo,
-		Message:       fmt.Sprintf("%d Node(s) are cordoned", len(names)),
-		AffectedCount: len(names),
-		AffectedResources: &healthv1.AffectedResources{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       nodeKind,
-			Names:      nameMap,
-		},
-	}
+	return newCheckResult(healthv1.SeverityInfo, fmt.Sprintf("%d Node(s) are cordoned", len(names)),
+		resourceRef{apiVersion: corev1.SchemeGroupVersion.String(), kind: nodeKind}, names, nil)
 }

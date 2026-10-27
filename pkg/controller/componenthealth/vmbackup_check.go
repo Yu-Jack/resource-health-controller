@@ -2,7 +2,6 @@ package componenthealth
 
 import (
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -79,24 +78,6 @@ func volumeBackupCreatedAfter(a, b *harvesterv1.VolumeBackup) bool {
 }
 
 func buildVMBackupCheckResult(names []string, messages []string) healthv1.CheckResult {
-	nameMap := make(map[string]healthv1.AffectedResourceDetail, len(names))
-	for _, name := range names {
-		nameMap[name] = healthv1.AffectedResourceDetail{}
-	}
-
-	message := fmt.Sprintf("%d VirtualMachineBackup(s) failed", len(names))
-	if len(messages) > 0 {
-		message = fmt.Sprintf("%s: %s", message, strings.Join(messages, "; "))
-	}
-
-	return healthv1.CheckResult{
-		Severity:      healthv1.SeverityError,
-		Message:       message,
-		AffectedCount: len(names),
-		AffectedResources: &healthv1.AffectedResources{
-			APIVersion: harvesterv1.SchemeGroupVersion.String(),
-			Kind:       vmBackupKind,
-			Names:      nameMap,
-		},
-	}
+	return newCheckResult(healthv1.SeverityError, fmt.Sprintf("%d VirtualMachineBackup(s) failed", len(names)),
+		resourceRef{apiVersion: harvesterv1.SchemeGroupVersion.String(), kind: vmBackupKind}, names, messages)
 }

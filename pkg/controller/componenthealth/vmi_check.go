@@ -97,19 +97,7 @@ func (h *Handler) reconcileVMI() error {
 }
 
 func buildVMCheckResult(severity healthv1.Severity, reason string, names []string) healthv1.CheckResult {
-	nameMap := make(map[string]healthv1.AffectedResourceDetail, len(names))
-	for _, name := range names {
-		nameMap[name] = healthv1.AffectedResourceDetail{}
-	}
-
-	return healthv1.CheckResult{
-		Severity:      severity,
-		Message:       fmt.Sprintf("%d VM(s) cannot be live migrated: %s", len(names), reason),
-		AffectedCount: len(names),
-		AffectedResources: &healthv1.AffectedResources{
-			APIVersion: kubevirtv1.SchemeGroupVersion.String(),
-			Kind:       kubevirtv1.VirtualMachineGroupVersionKind.Kind,
-			Names:      nameMap,
-		},
-	}
+	return newCheckResult(severity, fmt.Sprintf("%d VM(s) cannot be live migrated", len(names)),
+		resourceRef{apiVersion: kubevirtv1.SchemeGroupVersion.String(), kind: kubevirtv1.VirtualMachineGroupVersionKind.Kind},
+		names, []string{reason})
 }

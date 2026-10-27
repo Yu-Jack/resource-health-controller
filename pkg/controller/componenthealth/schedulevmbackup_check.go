@@ -2,7 +2,6 @@ package componenthealth
 
 import (
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -29,18 +28,10 @@ func (h *Handler) reconcileScheduleVMBackups() error {
 		return fmt.Errorf("failed to list ScheduleVMBackups: %w", err)
 	}
 
-	summariesByReason := map[string]volumeConditionSummary{}
+	summariesByReason := resourceGroups{}
 	for _, scheduleVMBackup := range scheduleVMBackups {
 		for _, condition := range getTrueConditions(scheduleVMBackup) {
-			summary := summariesByReason[condition.Reason]
-			if summary.messages == nil {
-				summary.messages = map[string]struct{}{}
-			}
-			summary.names = append(summary.names, scheduleVMBackup.Name)
-			if condition.Message != "" {
-				summary.messages[condition.Message] = struct{}{}
-			}
-			summariesByReason[condition.Reason] = summary
+			summariesByReason.add(condition.Reason, scheduleVMBackup.Name, condition.Message)
 		}
 	}
 
@@ -64,24 +55,6 @@ func getTrueConditions(scheduleVMBackup *harvesterv1.ScheduleVMBackup) []harvest
 }
 
 func buildScheduleVMBackupCheckResult(reason string, names []string, messages []string) healthv1.CheckResult {
-	nameMap := make(map[string]healthv1.AffectedResourceDetail, len(names))
-	for _, name := range names {
-		nameMap[name] = healthv1.AffectedResourceDetail{}
-	}
-
-	message := fmt.Sprintf("%d ScheduleVMBackup(s) have %s", len(names), reason)
-	if len(messages) > 0 {
-		message = fmt.Sprintf("%s: %s", message, strings.Join(messages, "; "))
-	}
-
-	return healthv1.CheckResult{
-		Severity:      healthv1.SeverityError,
-		Message:       message,
-		AffectedCount: len(names),
-		AffectedResources: &healthv1.AffectedResources{
-			APIVersion: harvesterv1.SchemeGroupVersion.String(),
-			Kind:       scheduleVMBackupKind,
-			Names:      nameMap,
-		},
-	}
+	return newCheckResult(healthv1.SeverityError, fmt.Sprintf("%d ScheduleVMBackup(s) have %s", len(names), reason),
+		resourceRef{apiVersion: harvesterv1.SchemeGroupVersion.String(), kind: scheduleVMBackupKind}, names, messages)
 }
