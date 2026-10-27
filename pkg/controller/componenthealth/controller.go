@@ -3,17 +3,11 @@ package componenthealth
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"sort"
-	"time"
 
 	ctlharvcorev1 "github.com/harvester/harvester/pkg/generated/controllers/core/v1"
 	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctlkubevirtv1 "github.com/harvester/harvester/pkg/generated/controllers/kubevirt.io/v1"
 	ctllonghornv1 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
-	"github.com/sirupsen/logrus"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
@@ -22,8 +16,6 @@ import (
 )
 
 const (
-	// componentName is the logical component name of the checks that watch harvester/harvester resources.
-	componentName             = "harvester-controller"
 	nodeComponentHealthName   = "harvester-controller-node"
 	vmComponentHealthName     = "harvester-controller-vm"
 	volumeComponentHealthName = "harvester-controller-volume"
@@ -137,82 +129,12 @@ func (h *Handler) OnComponentHealthChanged(key string, health *healthv1.Componen
 	return health, nil
 }
 
-// replaceComponentHealthChecks replaces all the checks of a ComponentHealth, which is owned by a single
-// reconcile function, so checks that no longer apply are removed as well.
-// It skips the write entirely if the resulting checks are unchanged, which is what makes the
-// reconcile loop converge.
+// replaceComponentHealthChecks publishes checks through a componentHealthWriter built from the Handler's fields.
 func (h *Handler) replaceComponentHealthChecks(componentHealthName string, checks map[string]healthv1.CheckResult) error {
-	existing, err := h.componentHealths.Get(componentHealthName, metav1.GetOptions{})
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to get ComponentHealth %s: %w", componentHealthName, err)
-		}
-		created, err := h.componentHealths.Create(&healthv1.ComponentHealth{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: componentHealthName,
-				Labels: map[string]string{
-					healthv1.LabelKeyComponent: componentName,
-				},
-			},
-			Status: healthv1.ComponentHealthStatus{
-				LastUpdatedAt: metav1.Now(),
-				Checks:        checks,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create ComponentHealth %s: %w", componentHealthName, err)
-		}
-		logrus.WithFields(logrus.Fields{
-			"component":        componentName,
-			"component_health": componentHealthName,
-			"checks":           getCheckKeys(checks),
-		}).Info("created ComponentHealth checks")
-		existing = created
+	writer := componentHealthWriter{
+		controller:  h.componentHealthController,
+		client:      h.componentHealths,
+		ignoreRules: h.ignoreRuleCache,
 	}
-
-	rules, err := h.listIgnoreRules(componentHealthName)
-	if err != nil {
-		return fmt.Errorf("failed to list HealthIgnoreRules: %w", err)
-	}
-	updatedChecks, nextExpiry := applyIgnoreRules(checks, rules, time.Now())
-	if nextExpiry != nil {
-		// nothing else triggers a reconcile when a rule expires
-		h.componentHealthController.EnqueueAfter(componentHealthName, time.Until(*nextExpiry))
-	}
-
-	if len(existing.Status.Checks) == 0 && len(updatedChecks) == 0 || reflect.DeepEqual(existing.Status.Checks, updatedChecks) {
-		logrus.WithFields(logrus.Fields{
-			"component":        componentName,
-			"component_health": componentHealthName,
-			"checks":           getCheckKeys(checks),
-		}).Debug("ComponentHealth checks unchanged")
-		return nil
-	}
-
-	toUpdate := existing.DeepCopy()
-	if toUpdate.Labels == nil {
-		toUpdate.Labels = map[string]string{}
-	}
-	toUpdate.Labels[healthv1.LabelKeyComponent] = componentName
-	toUpdate.Status.LastUpdatedAt = metav1.Now()
-	toUpdate.Status.Checks = updatedChecks
-	_, err = h.componentHealths.Update(toUpdate)
-	if err != nil {
-		return err
-	}
-	logrus.WithFields(logrus.Fields{
-		"component":        componentName,
-		"component_health": componentHealthName,
-		"checks":           getCheckKeys(checks),
-	}).Info("updated ComponentHealth checks")
-	return nil
-}
-
-func getCheckKeys(checks map[string]healthv1.CheckResult) []string {
-	keys := make([]string, 0, len(checks))
-	for key := range checks {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
+	return writer.replaceComponentHealthChecks(componentHealthName, checks)
 }

@@ -7,14 +7,15 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+	ctlhealthv1 "github.com/harvester/resource-health-controller/pkg/generated/controllers/health.harvesterhci.io/v1beta1"
 )
 
 // listIgnoreRules returns the rules that target the given ComponentHealth, sorted by name so the result is deterministic.
-func (h *Handler) listIgnoreRules(componentHealthName string) ([]*healthv1.HealthIgnoreRule, error) {
-	if h.ignoreRuleCache == nil {
+func listIgnoreRules(ignoreRules ctlhealthv1.HealthIgnoreRuleCache, componentHealthName string) ([]*healthv1.HealthIgnoreRule, error) {
+	if ignoreRules == nil {
 		return nil, nil
 	}
-	all, err := h.ignoreRuleCache.List(labels.Everything())
+	all, err := ignoreRules.List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
