@@ -3,7 +3,6 @@ package componenthealth
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/rancher/wrangler/v3/pkg/condition"
 	corev1 "k8s.io/api/core/v1"
@@ -54,23 +53,27 @@ func (c *vmImageCheck) reconcile() error {
 		return fmt.Errorf("failed to list VirtualMachineImages: %w", err)
 	}
 
-	checks := map[string]healthv1.CheckResult{}
-	messages := map[string]map[string]struct{}{}
+	groups := resourceGroups{}
+	severities := map[string]healthv1.Severity{}
 	for _, image := range images {
 		if image.DeletionTimestamp != nil {
 			continue
 		}
-		key, severity, cond := vmImageFailure(image)
-		if key != "" {
-			addVMImageCheck(checks, messages, image, key, severity, cond)
+		name := image.Namespace + "/" + image.Name
+		if key, severity, cond := vmImageFailure(image); key != "" {
+			groups.add(key, name, vmImageMessage(image, name, cond))
+			severities[key] = severity
 		}
 		if harvesterv1.BackingImageMissing.IsTrue(image) {
-			addVMImageCheck(checks, messages, image, checkKeyImageBackingImageMissing, healthv1.SeverityWarning, harvesterv1.BackingImageMissing)
+			groups.add(checkKeyImageBackingImageMissing, name, vmImageMessage(image, name, harvesterv1.BackingImageMissing))
+			severities[checkKeyImageBackingImageMissing] = healthv1.SeverityWarning
 		}
 	}
-	for key, check := range checks {
-		check.Message = fmt.Sprintf("%d VirtualMachineImage(s): %s", check.AffectedCount, strings.Join(getSortedMessages(messages[key]), "; "))
-		checks[key] = check
+
+	checks := map[string]healthv1.CheckResult{}
+	for key, group := range groups {
+		checks[key] = newCheckResult(severities[key], fmt.Sprintf("%d VirtualMachineImage(s)", len(group.names)),
+			resourceRef{apiVersion: harvesterv1.SchemeGroupVersion.String(), kind: vmImageKind}, group.names, getSortedMessages(group.messages))
 	}
 	return c.writer.replaceComponentHealthChecks(vmImageComponentHealthName, checks)
 }
@@ -96,28 +99,12 @@ func vmImageFailure(image *harvesterv1.VirtualMachineImage) (string, healthv1.Se
 	}
 }
 
-func addVMImageCheck(checks map[string]healthv1.CheckResult, messages map[string]map[string]struct{}, image *harvesterv1.VirtualMachineImage, key string, severity healthv1.Severity, cond condition.Cond) {
-	check, ok := checks[key]
-	if !ok {
-		check = healthv1.CheckResult{
-			Severity: severity,
-			AffectedResources: &healthv1.AffectedResources{
-				APIVersion: harvesterv1.SchemeGroupVersion.String(),
-				Kind:       vmImageKind,
-				Names:      map[string]healthv1.AffectedResourceDetail{},
-			},
-		}
-		messages[key] = map[string]struct{}{}
-	}
-	name := image.Namespace + "/" + image.Name
-	check.AffectedResources.Names[name] = healthv1.AffectedResourceDetail{}
-	check.AffectedCount = len(check.AffectedResources.Names)
+func vmImageMessage(image *harvesterv1.VirtualMachineImage, name string, cond condition.Cond) string {
 	message := fmt.Sprintf("%s: %s=%s, reason=%q, message=%q, failed=%d, retry=%d, lastFailedTime=%q",
 		name, cond, cond.GetStatus(image), cond.GetReason(image), cond.GetMessage(image),
 		image.Status.Failed, image.Spec.Retry, image.Status.LastFailedTime)
 	if cond == harvesterv1.BackingImageMissing {
 		message = "previous backing image lookup failed (condition is not automatically cleared): " + message
 	}
-	messages[key][message] = struct{}{}
-	checks[key] = check
+	return message
 }
