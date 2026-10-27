@@ -13,61 +13,68 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
-	ctlhealthv1 "github.com/harvester/resource-health-controller/pkg/generated/controllers/health.harvesterhci.io/v1beta1"
+	"github.com/harvester/resource-health-controller/pkg/controller/componenthealth/core"
+	"github.com/harvester/resource-health-controller/pkg/controller/componenthealth/harvesterhci"
+	"github.com/harvester/resource-health-controller/pkg/controller/componenthealth/healthcheck"
+	"github.com/harvester/resource-health-controller/pkg/controller/componenthealth/kubevirt"
+	"github.com/harvester/resource-health-controller/pkg/controller/componenthealth/longhorn"
+	"github.com/harvester/resource-health-controller/pkg/controller/componenthealth/testutil"
 	"github.com/harvester/resource-health-controller/pkg/util/fakeclients"
 )
 
-type recordingComponentHealthController struct {
-	ctlhealthv1.ComponentHealthController
-	enqueued      []string
-	enqueuedAfter []string
+// componentHealthNames are the ComponentHealth names that users and ignore rules see, in registration order.
+var componentHealthNames = []string{
+	"harvester-controller-node",
+	"harvester-controller-vm",
+	"harvester-controller-volume",
+	"harvester-controller-vmbackup",
+	"harvester-controller-schedulevmbackup",
+	"harvester-controller-vmimage",
 }
 
-func (controller *recordingComponentHealthController) EnqueueAfter(name string, _ time.Duration) {
-	controller.enqueuedAfter = append(controller.enqueuedAfter, name)
-}
+const (
+	vmBackupComponentHealthName = "harvester-controller-vmbackup"
+	checkKeyVMBackupFailed      = "VMBackupFailed"
+)
 
-func (controller *recordingComponentHealthController) Enqueue(name string) {
-	controller.enqueued = append(controller.enqueued, name)
-}
-
-func TestVMBackupCallbacksEnqueueComponentHealth(t *testing.T) {
-	controller := &recordingComponentHealthController{}
-	handler := &vmBackupCheck{writer: componentHealthWriter{controller: controller}}
-	for index := 0; index < 100; index++ {
-		backup := newVMBackup(fmt.Sprintf("backup-%d", index), nil)
-		result, err := handler.OnVMBackupChanged("default/"+backup.Name, backup)
-		assert.Same(t, backup, result)
-		assert.NoError(t, err)
+// newTestHealthChecks returns every check with no caches, for tests that only need the check names.
+func newTestHealthChecks(writer healthcheck.Writer) []healthcheck.Check {
+	return []healthcheck.Check{
+		core.NewNodeCheck(writer, nil),
+		kubevirt.NewVMICheck(writer, nil),
+		longhorn.NewVolumeCheck(writer, nil),
+		harvesterhci.NewVMBackupCheck(writer, nil),
+		harvesterhci.NewScheduleVMBackupCheck(writer, nil),
+		harvesterhci.NewVMImageCheck(writer, nil),
 	}
-	assert.Len(t, controller.enqueued, 100)
-	for _, name := range controller.enqueued {
-		assert.Equal(t, vmBackupComponentHealthName, name)
+}
+
+func TestTestHealthChecksMatchRegistrations(t *testing.T) {
+	checks := newTestHealthChecks(healthcheck.Writer{})
+
+	assert.Len(t, checks, len(registrations))
+	names := make([]string, 0, len(checks))
+	for _, check := range checks {
+		names = append(names, check.Name())
 	}
+	assert.Equal(t, componentHealthNames, names)
 }
 
 func TestEnqueueInitialHealth(t *testing.T) {
-	controller := &recordingComponentHealthController{}
+	controller := &testutil.RecordingController{}
 	handler := &Handler{
 		componentHealthController: controller,
 		healthCachesSynced:        []cache.InformerSynced{func() bool { return true }},
 	}
-	handler.checks = newTestHealthChecks(componentHealthWriter{})
+	handler.checks = newTestHealthChecks(healthcheck.Writer{})
 	handler.enqueueInitialHealth(context.Background())
-	assert.Equal(t, []string{
-		nodeComponentHealthName,
-		vmComponentHealthName,
-		volumeComponentHealthName,
-		vmBackupComponentHealthName,
-		scheduleVMBackupComponentHealthName,
-		vmImageComponentHealthName,
-	}, controller.enqueued)
+	assert.Equal(t, componentHealthNames, controller.Enqueued)
 }
 
 func TestEnqueueInitialHealthWaitsForCachesAndStopsOnCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	controller := &recordingComponentHealthController{}
+	controller := &testutil.RecordingController{}
 	checked := make(chan struct{}, 1)
 	handler := &Handler{
 		componentHealthController: controller,
@@ -95,46 +102,36 @@ func TestEnqueueInitialHealthWaitsForCachesAndStopsOnCancellation(t *testing.T) 
 	case <-time.After(5 * time.Second):
 		t.Fatal("startup did not stop on cancellation")
 	}
-	assert.Empty(t, controller.enqueued)
+	assert.Empty(t, controller.Enqueued)
 }
 
 func TestOnComponentHealthChangedDispatch(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		{name: nodeComponentHealthName},
-		{name: vmComponentHealthName},
-		{name: volumeComponentHealthName},
-		{name: vmBackupComponentHealthName},
-		{name: scheduleVMBackupComponentHealthName},
-		{name: vmImageComponentHealthName},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			clientset, healthset := newTestClients()
-			writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	for _, name := range componentHealthNames {
+		t.Run(name, func(t *testing.T) {
+			clientset, healthset := testutil.NewClients()
+			writer := healthcheck.Writer{Client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
 			handler := &Handler{
 				healthCachesSynced: []cache.InformerSynced{func() bool { return true }},
 			}
-			handler.checks = []healthCheck{
-				&nodeCheck{writer: writer, nodeCache: fakeclients.NodeCache(clientset.CoreV1().Nodes)},
-				&vmiCheck{writer: writer, vmiCache: fakeclients.VirtualMachineInstanceCache(clientset.KubevirtV1().VirtualMachineInstances)},
-				&volumeCheck{writer: writer, volumeCache: fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes)},
-				&vmBackupCheck{writer: writer, vmBackupCache: fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)},
-				&scheduleVMBackupCheck{writer: writer, scheduleVMBackupCache: fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups)},
-				&vmImageCheck{writer: writer, vmImageCache: fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages)},
+			handler.checks = []healthcheck.Check{
+				core.NewNodeCheck(writer, fakeclients.NodeCache(clientset.CoreV1().Nodes)),
+				kubevirt.NewVMICheck(writer, fakeclients.VirtualMachineInstanceCache(clientset.KubevirtV1().VirtualMachineInstances)),
+				longhorn.NewVolumeCheck(writer, fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes)),
+				harvesterhci.NewVMBackupCheck(writer, fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)),
+				harvesterhci.NewScheduleVMBackupCheck(writer, fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups)),
+				harvesterhci.NewVMImageCheck(writer, fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages)),
 			}
-			result, err := handler.OnComponentHealthChanged(tc.name, nil)
+			result, err := handler.OnComponentHealthChanged(name, nil)
 			assert.Nil(t, result)
 			if !assert.NoError(t, err) {
 				return
 			}
-			health, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), tc.name, metav1.GetOptions{})
+			health, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), name, metav1.GetOptions{})
 			if !assert.NoError(t, err) {
 				return
 			}
 			assert.Empty(t, health.Status.Checks)
-			result, err = handler.OnComponentHealthChanged(tc.name, health)
+			result, err = handler.OnComponentHealthChanged(name, health)
 			assert.Same(t, health, result)
 			assert.NoError(t, err)
 			for _, action := range healthset.Actions() {
@@ -155,11 +152,11 @@ func TestOnComponentHealthChangedWaitsForCaches(t *testing.T) {
 			func() bool { return false },
 		},
 	}
-	handler.checks = newTestHealthChecks(componentHealthWriter{})
+	handler.checks = newTestHealthChecks(healthcheck.Writer{})
 	for _, check := range handler.checks {
-		t.Run(check.name(), func(t *testing.T) {
-			health := &healthv1.ComponentHealth{ObjectMeta: metav1.ObjectMeta{Name: check.name()}}
-			result, err := handler.OnComponentHealthChanged(check.name(), health)
+		t.Run(check.Name(), func(t *testing.T) {
+			health := &healthv1.ComponentHealth{ObjectMeta: metav1.ObjectMeta{Name: check.Name()}}
+			result, err := handler.OnComponentHealthChanged(check.Name(), health)
 			assert.Same(t, health, result)
 			assert.EqualError(t, err, "ComponentHealth resource caches are not synced")
 		})
@@ -183,13 +180,13 @@ func TestOnComponentHealthChangedIgnoresUnownedKeys(t *testing.T) {
 }
 
 func TestOnComponentHealthChangedReturnsReconcileErrors(t *testing.T) {
-	clientset, _ := newTestClients()
+	clientset, _ := testutil.NewClients()
 	clientset.PrependReactor("list", "virtualmachinebackups", func(clienttesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("temporary cache failure")
 	})
 	handler := &Handler{}
-	handler.checks = []healthCheck{
-		&vmBackupCheck{vmBackupCache: fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)},
+	handler.checks = []healthcheck.Check{
+		harvesterhci.NewVMBackupCheck(healthcheck.Writer{}, fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)),
 	}
 	result, err := handler.OnComponentHealthChanged(vmBackupComponentHealthName, nil)
 	assert.Nil(t, result)
@@ -205,11 +202,11 @@ func TestOnComponentHealthChangedStopsUpdatingAfterChecksClear(t *testing.T) {
 			},
 		},
 	}
-	clientset, healthset := newTestClients(health)
+	clientset, healthset := testutil.NewClients(health)
 	handler := &Handler{}
-	writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
-	handler.checks = []healthCheck{
-		&vmBackupCheck{writer: writer, vmBackupCache: fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)},
+	writer := healthcheck.Writer{Client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	handler.checks = []healthcheck.Check{
+		harvesterhci.NewVMBackupCheck(writer, fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)),
 	}
 	_, err := handler.OnComponentHealthChanged(health.Name, health)
 	if !assert.NoError(t, err) {
@@ -229,4 +226,16 @@ func TestOnComponentHealthChangedStopsUpdatingAfterChecksClear(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, updateCalls)
+}
+
+func TestOnIgnoreRuleChangedEnqueuesEveryComponentHealth(t *testing.T) {
+	controller := &testutil.RecordingController{}
+	handler := &Handler{componentHealthController: controller}
+	handler.checks = newTestHealthChecks(healthcheck.Writer{})
+
+	// a deleted rule is seen as nil
+	result, err := handler.OnIgnoreRuleChanged("rule", nil)
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, componentHealthNames, controller.Enqueued)
 }
