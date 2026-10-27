@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	vmiControllerName = "componentHealthVMIController"
+	vmiControllerName     = "componentHealthVMIController"
+	vmComponentHealthName = "harvester-controller-vm"
 )
 
 // vmMigrationRule is an atomic live-migration blocking condition of a VMI.

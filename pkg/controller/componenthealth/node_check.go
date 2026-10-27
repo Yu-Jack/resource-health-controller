@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	nodeControllerName   = "componentHealthNodeController"
-	checkKeyNodeCordoned = "NodeCordoned"
-	nodeKind             = "Node"
+	nodeControllerName      = "componentHealthNodeController"
+	nodeComponentHealthName = "harvester-controller-node"
+	checkKeyNodeCordoned    = "NodeCordoned"
+	nodeKind                = "Node"
 )
 
 type nodeCheck struct {

@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	volumeControllerName = "componentHealthLonghornVolumeController"
-	volumeKind           = "Volume"
+	volumeControllerName      = "componentHealthLonghornVolumeController"
+	volumeComponentHealthName = "harvester-controller-volume"
+	volumeKind                = "Volume"
 
 	longhornNamespace = "longhorn-system"
 )

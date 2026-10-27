@@ -11,12 +11,6 @@ import (
 	ctlhealthv1 "github.com/harvester/resource-health-controller/pkg/generated/controllers/health.harvesterhci.io/v1beta1"
 )
 
-const (
-	nodeComponentHealthName   = "harvester-controller-node"
-	vmComponentHealthName     = "harvester-controller-vm"
-	volumeComponentHealthName = "harvester-controller-volume"
-)
-
 // healthCheck is a unit that owns one ComponentHealth and recomputes all of its checks.
 type healthCheck interface {
 	// name is the name of the ComponentHealth the check owns.
