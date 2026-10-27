@@ -240,3 +240,30 @@ func TestOnIgnoreRuleChangedEnqueuesEveryComponentHealth(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Len(t, controller.enqueued, 6)
 }
+
+func TestListIgnoreRules(t *testing.T) {
+	_, healthset := newTestClients(
+		newIgnoreRule("rule-b", testCheckKey, nil, nil),
+		newIgnoreRule("rule-a", testCheckKey, nil, nil),
+		&healthv1.HealthIgnoreRule{
+			ObjectMeta: metav1.ObjectMeta{Name: "other"},
+			Spec:       healthv1.HealthIgnoreRuleSpec{ComponentHealth: nodeComponentHealthName, CheckKey: testCheckKey},
+		},
+	)
+
+	rules, err := listIgnoreRules(fakeclients.HealthIgnoreRuleCache(healthset.HealthV1beta1().HealthIgnoreRules), volumeComponentHealthName)
+
+	assert.NoError(t, err)
+	names := make([]string, 0, len(rules))
+	for _, rule := range rules {
+		names = append(names, rule.Name)
+	}
+	assert.Equal(t, []string{"rule-a", "rule-b"}, names)
+}
+
+func TestListIgnoreRulesWithoutCache(t *testing.T) {
+	rules, err := listIgnoreRules(nil, volumeComponentHealthName)
+
+	assert.NoError(t, err)
+	assert.Empty(t, rules)
+}

@@ -26,6 +26,31 @@ func newScheduleVMBackup(name string, conditions []harvesterv1.Condition) *harve
 	}
 }
 
+func TestReconcileScheduleVMBackupsKeepsSameNameInDifferentNamespaces(t *testing.T) {
+	conditions := []harvesterv1.Condition{
+		{Type: condition.Cond("BackupSuspend"), Status: corev1.ConditionTrue, Reason: "Reach Max Failure"},
+	}
+	schedule := newScheduleVMBackup("schedule", conditions)
+	other := newScheduleVMBackup("schedule", conditions)
+	other.Namespace = "other"
+	clientset, healthset := newTestClients(schedule, other)
+	writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	schedules := &scheduleVMBackupCheck{writer: writer, scheduleVMBackupCache: fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups)}
+
+	if !assert.NoError(t, schedules.reconcile()) {
+		return
+	}
+
+	health, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), scheduleVMBackupComponentHealthName, metav1.GetOptions{})
+	if !assert.NoError(t, err) {
+		return
+	}
+	check := health.Status.Checks["Reach Max Failure"]
+	assert.Equal(t, 2, check.AffectedCount)
+	assert.Contains(t, check.AffectedResources.Names, "default/schedule")
+	assert.Contains(t, check.AffectedResources.Names, "other/schedule")
+}
+
 func TestReconcileScheduleVMBackups(t *testing.T) {
 	tests := []struct {
 		name             string
