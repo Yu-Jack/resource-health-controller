@@ -21,6 +21,16 @@ const (
 	volumeComponentHealthName = "harvester-controller-volume"
 )
 
+// healthCheck is a unit that owns one ComponentHealth and recomputes all of its checks.
+type healthCheck interface {
+	// name is the name of the ComponentHealth the check owns.
+	name() string
+	reconcile() error
+}
+
+// checkRegistration builds a check with its caches, registers its change handlers and returns its HasSynced.
+type checkRegistration func(ctx context.Context, writer componentHealthWriter, management *config.Management) (healthCheck, cache.InformerSynced)
+
 var componentReconcilers = []struct {
 	name      string
 	reconcile func(*Handler) error
