@@ -8,6 +8,11 @@ import (
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
 )
 
+// namespacedName is the name under which a namespaced resource is reported in AffectedResources.
+func namespacedName(namespace, name string) string {
+	return namespace + "/" + name
+}
+
 // resourceRef identifies the kind of the resources a check reports on.
 type resourceRef struct {
 	apiVersion string

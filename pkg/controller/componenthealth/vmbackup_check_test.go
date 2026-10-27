@@ -100,13 +100,36 @@ func TestOnVMBackupChangedAfterDeletion(t *testing.T) {
 			if tc.remainingFailure {
 				check := health.Status.Checks[checkKeyVMBackupFailed]
 				assert.Equal(t, 1, check.AffectedCount)
-				assert.Contains(t, check.AffectedResources.Names, "remaining-backup")
-				assert.NotContains(t, check.AffectedResources.Names, backup.Name)
+				assert.Contains(t, check.AffectedResources.Names, "default/remaining-backup")
+				assert.NotContains(t, check.AffectedResources.Names, namespacedName(backup.Namespace, backup.Name))
 			} else {
 				assert.Empty(t, health.Status.Checks)
 			}
 		})
 	}
+}
+
+func TestReconcileVMBackupsKeepsSameNameInDifferentNamespaces(t *testing.T) {
+	failed := []harvesterv1.VolumeBackup{{Error: &harvesterv1.Error{Message: errorMessage("backup failed")}}}
+	backup := newVMBackup("backup", failed)
+	other := newVMBackup("backup", failed)
+	other.Namespace = "other"
+	clientset, healthset := newTestClients(backup, other)
+	writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	backups := &vmBackupCheck{writer: writer, vmBackupCache: fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)}
+
+	if !assert.NoError(t, backups.reconcile()) {
+		return
+	}
+
+	health, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), vmBackupComponentHealthName, metav1.GetOptions{})
+	if !assert.NoError(t, err) {
+		return
+	}
+	check := health.Status.Checks[checkKeyVMBackupFailed]
+	assert.Equal(t, 2, check.AffectedCount)
+	assert.Contains(t, check.AffectedResources.Names, "default/backup")
+	assert.Contains(t, check.AffectedResources.Names, "other/backup")
 }
 
 func TestReconcileVMBackups(t *testing.T) {
@@ -138,7 +161,7 @@ func TestReconcileVMBackups(t *testing.T) {
 				assert.Equal(t, 1, check.AffectedCount)
 				assert.Equal(t, harvesterv1.SchemeGroupVersion.String(), check.AffectedResources.APIVersion)
 				assert.Equal(t, vmBackupKind, check.AffectedResources.Kind)
-				assert.Contains(t, check.AffectedResources.Names, "failed-vmbackup")
+				assert.Contains(t, check.AffectedResources.Names, "default/failed-vmbackup")
 			},
 		},
 		{

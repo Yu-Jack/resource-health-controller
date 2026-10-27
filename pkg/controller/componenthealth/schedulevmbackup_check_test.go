@@ -50,7 +50,7 @@ func TestReconcileScheduleVMBackups(t *testing.T) {
 				assert.Equal(t, 1, check.AffectedCount)
 				assert.Equal(t, harvesterv1.SchemeGroupVersion.String(), check.AffectedResources.APIVersion)
 				assert.Equal(t, scheduleVMBackupKind, check.AffectedResources.Kind)
-				assert.Contains(t, check.AffectedResources.Names, "suspended-svmbackup")
+				assert.Contains(t, check.AffectedResources.Names, "default/suspended-svmbackup")
 			},
 		},
 		{

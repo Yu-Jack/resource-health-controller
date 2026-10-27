@@ -59,7 +59,7 @@ func (c *vmImageCheck) reconcile() error {
 		if image.DeletionTimestamp != nil {
 			continue
 		}
-		name := image.Namespace + "/" + image.Name
+		name := namespacedName(image.Namespace, image.Name)
 		if key, severity, cond := vmImageFailure(image); key != "" {
 			groups.add(key, name, vmImageMessage(image, name, cond))
 			severities[key] = severity

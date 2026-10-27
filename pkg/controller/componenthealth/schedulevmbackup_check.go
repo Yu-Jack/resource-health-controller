@@ -49,7 +49,7 @@ func (c *scheduleVMBackupCheck) reconcile() error {
 	summariesByReason := resourceGroups{}
 	for _, scheduleVMBackup := range scheduleVMBackups {
 		for _, condition := range getTrueConditions(scheduleVMBackup) {
-			summariesByReason.add(condition.Reason, scheduleVMBackup.Name, condition.Message)
+			summariesByReason.add(condition.Reason, namespacedName(scheduleVMBackup.Namespace, scheduleVMBackup.Name), condition.Message)
 		}
 	}
 

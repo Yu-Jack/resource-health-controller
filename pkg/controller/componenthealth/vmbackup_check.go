@@ -57,7 +57,7 @@ func (c *vmBackupCheck) reconcile() error {
 		if volumeBackup == nil {
 			continue
 		}
-		names = append(names, vmBackup.Name)
+		names = append(names, namespacedName(vmBackup.Namespace, vmBackup.Name))
 		messageSet[*volumeBackup.Error.Message] = struct{}{}
 	}
 

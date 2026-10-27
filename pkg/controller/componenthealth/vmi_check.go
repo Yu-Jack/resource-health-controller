@@ -56,7 +56,7 @@ func getVMINamesMatching(vmis []*kubevirtv1.VirtualMachineInstance, match func(*
 	var names []string
 	for _, vmi := range vmis {
 		if match(vmi) {
-			names = append(names, fmt.Sprintf("%s/%s", vmi.Namespace, vmi.Name))
+			names = append(names, namespacedName(vmi.Namespace, vmi.Name))
 		}
 	}
 	return names
