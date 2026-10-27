@@ -75,11 +75,9 @@ func TestReconcileVMImages(t *testing.T) {
 				image.DeletionTimestamp = &deletedAt
 			}
 			clientset, healthset := newTestClients(image)
-			handler := &Handler{
-				componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-				vmImageCache:     fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages),
-			}
-			if !assert.NoError(t, handler.reconcileVMImages()) {
+			writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+			images := &vmImageCheck{writer: writer, vmImageCache: fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages)}
+			if !assert.NoError(t, images.reconcile()) {
 				return
 			}
 			health, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), vmImageComponentHealthName, metav1.GetOptions{})
@@ -124,16 +122,18 @@ func TestVMImageChecksClearAndPreserveNamespacedResources(t *testing.T) {
 	other.Namespace = "other"
 	clientset, healthset := newTestClients(image, other)
 	controller := &recordingComponentHealthController{}
-	handler := &Handler{
-		componentHealthController: controller,
-		componentHealths:          fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-		vmImageCache:              fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages),
+	handler := &Handler{}
+	writer := componentHealthWriter{
+		controller: controller,
+		client:     fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
 	}
-	result, err := handler.OnVMImageChanged("default/image", image)
+	images := &vmImageCheck{writer: writer, vmImageCache: fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages)}
+	handler.checks = []healthCheck{images}
+	result, err := images.OnVMImageChanged("default/image", image)
 	assert.Same(t, image, result)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{vmImageComponentHealthName}, controller.enqueued)
-	if !assert.NoError(t, handler.reconcileVMImages()) {
+	if !assert.NoError(t, images.reconcile()) {
 		return
 	}
 	health, err := healthset.HealthV1beta1().ComponentHealths().Get(ctx, vmImageComponentHealthName, metav1.GetOptions{})
@@ -152,7 +152,7 @@ func TestVMImageChecksClearAndPreserveNamespacedResources(t *testing.T) {
 	if _, err := clientset.HarvesterhciV1beta1().VirtualMachineImages(image.Namespace).Update(ctx, image, metav1.UpdateOptions{}); !assert.NoError(t, err) {
 		return
 	}
-	if !assert.NoError(t, handler.reconcileVMImages()) {
+	if !assert.NoError(t, images.reconcile()) {
 		return
 	}
 	health, err = healthset.HealthV1beta1().ComponentHealths().Get(ctx, vmImageComponentHealthName, metav1.GetOptions{})
@@ -165,7 +165,7 @@ func TestVMImageChecksClearAndPreserveNamespacedResources(t *testing.T) {
 	if !assert.NoError(t, clientset.HarvesterhciV1beta1().VirtualMachineImages(other.Namespace).Delete(ctx, other.Name, metav1.DeleteOptions{})) {
 		return
 	}
-	result, err = handler.OnVMImageChanged("other/image", nil)
+	result, err = images.OnVMImageChanged("other/image", nil)
 	assert.Nil(t, result)
 	assert.NoError(t, err)
 	_, err = handler.OnComponentHealthChanged(controller.enqueued[1], health)
@@ -183,6 +183,6 @@ func TestReconcileVMImagesListError(t *testing.T) {
 	clientset.PrependReactor("list", "virtualmachineimages", func(clienttesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("cache failure")
 	})
-	handler := &Handler{vmImageCache: fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages)}
-	assert.EqualError(t, handler.reconcileVMImages(), "failed to list VirtualMachineImages: cache failure")
+	images := &vmImageCheck{vmImageCache: fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages)}
+	assert.EqualError(t, images.reconcile(), "failed to list VirtualMachineImages: cache failure")
 }

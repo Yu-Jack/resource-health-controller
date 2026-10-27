@@ -15,12 +15,10 @@ import (
 
 func TestReconcileVMIOnlyUsesVMICache(t *testing.T) {
 	clientset, healthset := newTestClients()
-	handler := &Handler{
-		componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-		vmiCache:         fakeclients.VirtualMachineInstanceCache(clientset.KubevirtV1().VirtualMachineInstances),
-	}
+	writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	vmis := &vmiCheck{writer: writer, vmiCache: fakeclients.VirtualMachineInstanceCache(clientset.KubevirtV1().VirtualMachineInstances)}
 
-	err := handler.reconcileVMI()
+	err := vmis.reconcile()
 	assert.NoError(t, err)
 
 	componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), vmComponentHealthName, metav1.GetOptions{})

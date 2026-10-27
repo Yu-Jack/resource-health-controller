@@ -8,6 +8,18 @@ import (
 	healthfake "github.com/harvester/resource-health-controller/pkg/generated/clientset/versioned/fake"
 )
 
+// newTestHealthChecks returns every check with no caches, for tests that only need the check names.
+func newTestHealthChecks(writer componentHealthWriter) []healthCheck {
+	return []healthCheck{
+		&nodeCheck{writer: writer},
+		&vmiCheck{writer: writer},
+		&volumeCheck{writer: writer},
+		&vmBackupCheck{writer: writer},
+		&scheduleVMBackupCheck{writer: writer},
+		&vmImageCheck{writer: writer},
+	}
+}
+
 // newTestClients splits objects between the harvester fake clientset (watched resources)
 // and the addon fake clientset (ComponentHealth / HealthSummary).
 func newTestClients(objs ...runtime.Object) (*harvfake.Clientset, *healthfake.Clientset) {

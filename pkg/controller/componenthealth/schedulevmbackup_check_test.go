@@ -74,12 +74,10 @@ func TestReconcileScheduleVMBackups(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			clientset, healthset := newTestClients(tc.scheduleVMBackup)
-			handler := &Handler{
-				componentHealths:      fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-				scheduleVMBackupCache: fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups),
-			}
+			writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+			schedules := &scheduleVMBackupCheck{writer: writer, scheduleVMBackupCache: fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups)}
 
-			err := handler.reconcileScheduleVMBackups()
+			err := schedules.reconcile()
 			assert.NoError(t, err)
 
 			componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), scheduleVMBackupComponentHealthName, metav1.GetOptions{})

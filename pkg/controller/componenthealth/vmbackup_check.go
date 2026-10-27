@@ -1,13 +1,17 @@
 package componenthealth
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 
 	harvesterv1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+	"github.com/harvester/resource-health-controller/pkg/config"
 )
 
 const (
@@ -20,14 +24,28 @@ const (
 	checkKeyVMBackupFailed = "VMBackupFailed"
 )
 
+type vmBackupCheck struct {
+	writer        componentHealthWriter
+	vmBackupCache ctlharvesterv1.VirtualMachineBackupCache
+}
+
+func (c *vmBackupCheck) name() string { return vmBackupComponentHealthName }
+
 // OnVMBackupChanged queues a ComponentHealth reconciliation on every VirtualMachineBackup change.
-func (h *Handler) OnVMBackupChanged(_ string, vmBackup *harvesterv1.VirtualMachineBackup) (*harvesterv1.VirtualMachineBackup, error) {
-	h.enqueueHealth(vmBackupComponentHealthName)
+func (c *vmBackupCheck) OnVMBackupChanged(_ string, vmBackup *harvesterv1.VirtualMachineBackup) (*harvesterv1.VirtualMachineBackup, error) {
+	c.writer.enqueue(vmBackupComponentHealthName)
 	return vmBackup, nil
 }
 
-func (h *Handler) reconcileVMBackups() error {
-	vmBackups, err := h.vmBackupCache.List(corev1.NamespaceAll, labels.Everything())
+func registerVMBackupCheck(ctx context.Context, writer componentHealthWriter, management *config.Management) (healthCheck, cache.InformerSynced) {
+	vmBackups := management.HarvesterFactory.Harvesterhci().V1beta1().VirtualMachineBackup()
+	check := &vmBackupCheck{writer: writer, vmBackupCache: vmBackups.Cache()}
+	vmBackups.OnChange(ctx, vmBackupControllerName, check.OnVMBackupChanged)
+	return check, vmBackups.Informer().HasSynced
+}
+
+func (c *vmBackupCheck) reconcile() error {
+	vmBackups, err := c.vmBackupCache.List(corev1.NamespaceAll, labels.Everything())
 	if err != nil {
 		return fmt.Errorf("failed to list VirtualMachineBackups: %w", err)
 	}
@@ -48,7 +66,7 @@ func (h *Handler) reconcileVMBackups() error {
 		checks[checkKeyVMBackupFailed] = buildVMBackupCheckResult(names, getSortedMessages(messageSet))
 	}
 
-	return h.replaceComponentHealthChecks(vmBackupComponentHealthName, checks)
+	return c.writer.replaceComponentHealthChecks(vmBackupComponentHealthName, checks)
 }
 
 // getLatestVolumeBackupWithError returns the most recently created VolumeBackup that has an

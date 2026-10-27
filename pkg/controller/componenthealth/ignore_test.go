@@ -178,14 +178,14 @@ func TestReconcileVolumesAppliesIgnoreRules(t *testing.T) {
 		},
 	)
 	controller := &recordingComponentHealthController{}
-	handler := &Handler{
-		componentHealthController: controller,
-		componentHealths:          fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-		volumeCache:               fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes),
-		ignoreRuleCache:           fakeclients.HealthIgnoreRuleCache(healthset.HealthV1beta1().HealthIgnoreRules),
+	writer := componentHealthWriter{
+		controller:  controller,
+		client:      fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
+		ignoreRules: fakeclients.HealthIgnoreRuleCache(healthset.HealthV1beta1().HealthIgnoreRules),
 	}
+	volumes := &volumeCheck{writer: writer, volumeCache: fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes)}
 
-	assert.NoError(t, handler.reconcileVolumes())
+	assert.NoError(t, volumes.reconcile())
 
 	componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), volumeComponentHealthName, metav1.GetOptions{})
 	assert.NoError(t, err)
@@ -199,7 +199,7 @@ func TestReconcileVolumesAppliesIgnoreRules(t *testing.T) {
 
 	// the rule is deleted: the mark goes away
 	assert.NoError(t, healthset.HealthV1beta1().HealthIgnoreRules().Delete(context.Background(), "ignore-aaa", metav1.DeleteOptions{}))
-	assert.NoError(t, handler.reconcileVolumes())
+	assert.NoError(t, volumes.reconcile())
 	componentHealth, err = healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), volumeComponentHealthName, metav1.GetOptions{})
 	assert.NoError(t, err)
 	assert.Equal(t, healthv1.AffectedResourceDetail{}, componentHealth.Status.Checks[testCheckKey].AffectedResources.Names["pvc-aaa"])
@@ -210,20 +210,20 @@ func TestReconcileVolumesIgnoreIsStable(t *testing.T) {
 		volumeWithFalseCondition("pvc-aaa"),
 		newIgnoreRule("ignore-all", testCheckKey, nil, nil),
 	)
-	handler := &Handler{
-		componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-		volumeCache:      fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes),
-		ignoreRuleCache:  fakeclients.HealthIgnoreRuleCache(healthset.HealthV1beta1().HealthIgnoreRules),
+	writer := componentHealthWriter{
+		client:      fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
+		ignoreRules: fakeclients.HealthIgnoreRuleCache(healthset.HealthV1beta1().HealthIgnoreRules),
 	}
+	volumes := &volumeCheck{writer: writer, volumeCache: fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes)}
 
-	assert.NoError(t, handler.reconcileVolumes())
+	assert.NoError(t, volumes.reconcile())
 	first, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), volumeComponentHealthName, metav1.GetOptions{})
 	assert.NoError(t, err)
 	assert.True(t, first.Status.Checks[testCheckKey].Ignored)
 
 	// nothing changed: the second reconcile must not write again
 	healthset.ClearActions()
-	assert.NoError(t, handler.reconcileVolumes())
+	assert.NoError(t, volumes.reconcile())
 	for _, action := range healthset.Actions() {
 		assert.NotEqual(t, "update", action.GetVerb())
 	}
@@ -232,6 +232,7 @@ func TestReconcileVolumesIgnoreIsStable(t *testing.T) {
 func TestOnIgnoreRuleChangedEnqueuesEveryComponentHealth(t *testing.T) {
 	controller := &recordingComponentHealthController{}
 	handler := &Handler{componentHealthController: controller}
+	handler.checks = newTestHealthChecks(componentHealthWriter{})
 
 	// a deleted rule is seen as nil
 	result, err := handler.OnIgnoreRuleChanged("rule", nil)

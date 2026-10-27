@@ -14,16 +14,22 @@ import (
 )
 
 func TestDeletionNotificationsClearComponentHealthChecks(t *testing.T) {
+	type deletionChecks struct {
+		node     *nodeCheck
+		vmi      *vmiCheck
+		volume   *volumeCheck
+		schedule *scheduleVMBackupCheck
+	}
 	tests := []struct {
 		name                string
 		componentHealthName string
-		onDelete            func(*testing.T, *Handler) error
+		onDelete            func(*testing.T, deletionChecks) error
 	}{
 		{
 			name:                "node",
 			componentHealthName: nodeComponentHealthName,
-			onDelete: func(t *testing.T, handler *Handler) error {
-				result, err := handler.OnNodeChanged("deleted-node", nil)
+			onDelete: func(t *testing.T, checks deletionChecks) error {
+				result, err := checks.node.OnNodeChanged("deleted-node", nil)
 				assert.Nil(t, result)
 				return err
 			},
@@ -31,8 +37,8 @@ func TestDeletionNotificationsClearComponentHealthChecks(t *testing.T) {
 		{
 			name:                "vmi",
 			componentHealthName: vmComponentHealthName,
-			onDelete: func(t *testing.T, handler *Handler) error {
-				result, err := handler.OnVMIChanged("default/deleted-vmi", nil)
+			onDelete: func(t *testing.T, checks deletionChecks) error {
+				result, err := checks.vmi.OnVMIChanged("default/deleted-vmi", nil)
 				assert.Nil(t, result)
 				return err
 			},
@@ -40,8 +46,8 @@ func TestDeletionNotificationsClearComponentHealthChecks(t *testing.T) {
 		{
 			name:                "volume",
 			componentHealthName: volumeComponentHealthName,
-			onDelete: func(t *testing.T, handler *Handler) error {
-				result, err := handler.OnVolumeChanged("longhorn-system/deleted-volume", nil)
+			onDelete: func(t *testing.T, checks deletionChecks) error {
+				result, err := checks.volume.OnVolumeChanged("longhorn-system/deleted-volume", nil)
 				assert.Nil(t, result)
 				return err
 			},
@@ -49,8 +55,8 @@ func TestDeletionNotificationsClearComponentHealthChecks(t *testing.T) {
 		{
 			name:                "scheduled backup",
 			componentHealthName: scheduleVMBackupComponentHealthName,
-			onDelete: func(t *testing.T, handler *Handler) error {
-				result, err := handler.OnScheduleVMBackupChanged("default/deleted-schedule", nil)
+			onDelete: func(t *testing.T, checks deletionChecks) error {
+				result, err := checks.schedule.OnScheduleVMBackupChanged("default/deleted-schedule", nil)
 				assert.Nil(t, result)
 				return err
 			},
@@ -68,15 +74,19 @@ func TestDeletionNotificationsClearComponentHealthChecks(t *testing.T) {
 				},
 			})
 			controller := &recordingComponentHealthController{}
-			handler := &Handler{
-				componentHealthController: controller,
-				componentHealths:          fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-				nodeCache:                 fakeclients.NodeCache(clientset.CoreV1().Nodes),
-				vmiCache:                  fakeclients.VirtualMachineInstanceCache(clientset.KubevirtV1().VirtualMachineInstances),
-				volumeCache:               fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes),
-				scheduleVMBackupCache:     fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups),
+			handler := &Handler{}
+			writer := componentHealthWriter{
+				controller: controller,
+				client:     fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
 			}
-			if !assert.NoError(t, tc.onDelete(t, handler)) {
+			checks := deletionChecks{
+				node:     &nodeCheck{writer: writer, nodeCache: fakeclients.NodeCache(clientset.CoreV1().Nodes)},
+				vmi:      &vmiCheck{writer: writer, vmiCache: fakeclients.VirtualMachineInstanceCache(clientset.KubevirtV1().VirtualMachineInstances)},
+				volume:   &volumeCheck{writer: writer, volumeCache: fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes)},
+				schedule: &scheduleVMBackupCheck{writer: writer, scheduleVMBackupCache: fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups)},
+			}
+			handler.checks = []healthCheck{checks.node, checks.vmi, checks.volume, checks.schedule}
+			if !assert.NoError(t, tc.onDelete(t, checks)) {
 				return
 			}
 			if !assert.Equal(t, []string{tc.componentHealthName}, controller.enqueued) {
@@ -135,12 +145,10 @@ func TestReconcileNodes(t *testing.T) {
 			}
 
 			clientset, healthset := newTestClients(objects...)
-			handler := &Handler{
-				componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-				nodeCache:        fakeclients.NodeCache(clientset.CoreV1().Nodes),
-			}
+			writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+			nodes := &nodeCheck{writer: writer, nodeCache: fakeclients.NodeCache(clientset.CoreV1().Nodes)}
 
-			err := handler.reconcileNodes()
+			err := nodes.reconcile()
 			assert.NoError(t, err)
 
 			componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), nodeComponentHealthName, metav1.GetOptions{})
@@ -177,12 +185,10 @@ func TestReconcileNodesReplacesExistingChecks(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
 		},
 	)
-	handler := &Handler{
-		componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-		nodeCache:        fakeclients.NodeCache(clientset.CoreV1().Nodes),
-	}
+	writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	nodes := &nodeCheck{writer: writer, nodeCache: fakeclients.NodeCache(clientset.CoreV1().Nodes)}
 
-	err := handler.reconcileNodes()
+	err := nodes.reconcile()
 	assert.NoError(t, err)
 
 	componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), nodeComponentHealthName, metav1.GetOptions{})
@@ -195,12 +201,10 @@ func TestReconcileNodesDoesNotUpdateEmptyChecks(t *testing.T) {
 	clientset, healthset := newTestClients(&healthv1.ComponentHealth{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeComponentHealthName},
 	})
-	handler := &Handler{
-		componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-		nodeCache:        fakeclients.NodeCache(clientset.CoreV1().Nodes),
-	}
+	writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	nodes := &nodeCheck{writer: writer, nodeCache: fakeclients.NodeCache(clientset.CoreV1().Nodes)}
 
-	err := handler.reconcileNodes()
+	err := nodes.reconcile()
 	assert.NoError(t, err)
 
 	componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), nodeComponentHealthName, metav1.GetOptions{})

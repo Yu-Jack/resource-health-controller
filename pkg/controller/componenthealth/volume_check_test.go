@@ -85,13 +85,10 @@ func TestReconcileVolumes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			clientset, healthset := newTestClients(tc.volume)
-			handler := &Handler{
-				componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-				vmiCache:         fakeclients.VirtualMachineInstanceCache(clientset.KubevirtV1().VirtualMachineInstances),
-				volumeCache:      fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes),
-			}
+			writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+			volumes := &volumeCheck{writer: writer, volumeCache: fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes)}
 
-			err := handler.reconcileVolumes()
+			err := volumes.reconcile()
 			assert.NoError(t, err)
 
 			componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), volumeComponentHealthName, metav1.GetOptions{})
@@ -135,12 +132,10 @@ func TestReconcileVolumesReplacesExistingChecks(t *testing.T) {
 			},
 		}),
 	)
-	handler := &Handler{
-		componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-		volumeCache:      fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes),
-	}
+	writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+	volumes := &volumeCheck{writer: writer, volumeCache: fakeclients.LonghornVolumeCache(clientset.LonghornV1beta2().Volumes)}
 
-	err := handler.reconcileVolumes()
+	err := volumes.reconcile()
 	assert.NoError(t, err)
 
 	componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), volumeComponentHealthName, metav1.GetOptions{})

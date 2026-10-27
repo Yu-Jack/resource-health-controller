@@ -1,12 +1,16 @@
 package componenthealth
 
 import (
+	"context"
 	"fmt"
 
+	ctlharvcorev1 "github.com/harvester/harvester/pkg/generated/controllers/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+	"github.com/harvester/resource-health-controller/pkg/config"
 )
 
 const (
@@ -15,13 +19,27 @@ const (
 	nodeKind             = "Node"
 )
 
-func (h *Handler) OnNodeChanged(_ string, node *corev1.Node) (*corev1.Node, error) {
-	h.enqueueHealth(nodeComponentHealthName)
+type nodeCheck struct {
+	writer    componentHealthWriter
+	nodeCache ctlharvcorev1.NodeCache
+}
+
+func (c *nodeCheck) name() string { return nodeComponentHealthName }
+
+func (c *nodeCheck) OnNodeChanged(_ string, node *corev1.Node) (*corev1.Node, error) {
+	c.writer.enqueue(nodeComponentHealthName)
 	return node, nil
 }
 
-func (h *Handler) reconcileNodes() error {
-	nodes, err := h.nodeCache.List(labels.Everything())
+func registerNodeCheck(ctx context.Context, writer componentHealthWriter, management *config.Management) (healthCheck, cache.InformerSynced) {
+	nodes := management.CoreFactory.Core().V1().Node()
+	check := &nodeCheck{writer: writer, nodeCache: nodes.Cache()}
+	nodes.OnChange(ctx, nodeControllerName, check.OnNodeChanged)
+	return check, nodes.Informer().HasSynced
+}
+
+func (c *nodeCheck) reconcile() error {
+	nodes, err := c.nodeCache.List(labels.Everything())
 	if err != nil {
 		return fmt.Errorf("failed to list Nodes: %w", err)
 	}
@@ -38,7 +56,7 @@ func (h *Handler) reconcileNodes() error {
 		checks[checkKeyNodeCordoned] = buildNodeCordonedCheckResult(cordonedNodeNames)
 	}
 
-	return h.replaceComponentHealthChecks(nodeComponentHealthName, checks)
+	return c.writer.replaceComponentHealthChecks(nodeComponentHealthName, checks)
 }
 
 func buildNodeCordonedCheckResult(names []string) healthv1.CheckResult {

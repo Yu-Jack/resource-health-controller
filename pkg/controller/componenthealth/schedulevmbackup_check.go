@@ -1,13 +1,17 @@
 package componenthealth
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 
 	harvesterv1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+	"github.com/harvester/resource-health-controller/pkg/config"
 )
 
 const (
@@ -16,14 +20,28 @@ const (
 	scheduleVMBackupKind                = "ScheduleVMBackup"
 )
 
+type scheduleVMBackupCheck struct {
+	writer                componentHealthWriter
+	scheduleVMBackupCache ctlharvesterv1.ScheduleVMBackupCache
+}
+
+func (c *scheduleVMBackupCheck) name() string { return scheduleVMBackupComponentHealthName }
+
 // OnScheduleVMBackupChanged queues a ComponentHealth reconciliation on every ScheduleVMBackup change.
-func (h *Handler) OnScheduleVMBackupChanged(_ string, scheduleVMBackup *harvesterv1.ScheduleVMBackup) (*harvesterv1.ScheduleVMBackup, error) {
-	h.enqueueHealth(scheduleVMBackupComponentHealthName)
+func (c *scheduleVMBackupCheck) OnScheduleVMBackupChanged(_ string, scheduleVMBackup *harvesterv1.ScheduleVMBackup) (*harvesterv1.ScheduleVMBackup, error) {
+	c.writer.enqueue(scheduleVMBackupComponentHealthName)
 	return scheduleVMBackup, nil
 }
 
-func (h *Handler) reconcileScheduleVMBackups() error {
-	scheduleVMBackups, err := h.scheduleVMBackupCache.List(corev1.NamespaceAll, labels.Everything())
+func registerScheduleVMBackupCheck(ctx context.Context, writer componentHealthWriter, management *config.Management) (healthCheck, cache.InformerSynced) {
+	scheduleVMBackups := management.HarvesterFactory.Harvesterhci().V1beta1().ScheduleVMBackup()
+	check := &scheduleVMBackupCheck{writer: writer, scheduleVMBackupCache: scheduleVMBackups.Cache()}
+	scheduleVMBackups.OnChange(ctx, scheduleVMBackupControllerName, check.OnScheduleVMBackupChanged)
+	return check, scheduleVMBackups.Informer().HasSynced
+}
+
+func (c *scheduleVMBackupCheck) reconcile() error {
+	scheduleVMBackups, err := c.scheduleVMBackupCache.List(corev1.NamespaceAll, labels.Everything())
 	if err != nil {
 		return fmt.Errorf("failed to list ScheduleVMBackups: %w", err)
 	}
@@ -40,7 +58,7 @@ func (h *Handler) reconcileScheduleVMBackups() error {
 		checks[reason] = buildScheduleVMBackupCheckResult(reason, summary.names, getSortedMessages(summary.messages))
 	}
 
-	return h.replaceComponentHealthChecks(scheduleVMBackupComponentHealthName, checks)
+	return c.writer.replaceComponentHealthChecks(scheduleVMBackupComponentHealthName, checks)
 }
 
 // getTrueConditions returns the ScheduleVMBackup conditions reporting a problem, i.e. status True with a reason.

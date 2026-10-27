@@ -1,13 +1,17 @@
 package componenthealth
 
 import (
+	"context"
 	"fmt"
 
+	ctllonghornv1 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+	"github.com/harvester/resource-health-controller/pkg/config"
 )
 
 const (
@@ -17,14 +21,28 @@ const (
 	longhornNamespace = "longhorn-system"
 )
 
+type volumeCheck struct {
+	writer      componentHealthWriter
+	volumeCache ctllonghornv1.VolumeCache
+}
+
+func (c *volumeCheck) name() string { return volumeComponentHealthName }
+
 // OnVolumeChanged queues a ComponentHealth reconciliation on every Longhorn Volume change.
-func (h *Handler) OnVolumeChanged(_ string, volume *longhornv1.Volume) (*longhornv1.Volume, error) {
-	h.enqueueHealth(volumeComponentHealthName)
+func (c *volumeCheck) OnVolumeChanged(_ string, volume *longhornv1.Volume) (*longhornv1.Volume, error) {
+	c.writer.enqueue(volumeComponentHealthName)
 	return volume, nil
 }
 
-func (h *Handler) reconcileVolumes() error {
-	volumes, err := h.volumeCache.List(longhornNamespace, labels.Everything())
+func registerVolumeCheck(ctx context.Context, writer componentHealthWriter, management *config.Management) (healthCheck, cache.InformerSynced) {
+	volumes := management.LonghornFactory.Longhorn().V1beta2().Volume()
+	check := &volumeCheck{writer: writer, volumeCache: volumes.Cache()}
+	volumes.OnChange(ctx, volumeControllerName, check.OnVolumeChanged)
+	return check, volumes.Informer().HasSynced
+}
+
+func (c *volumeCheck) reconcile() error {
+	volumes, err := c.volumeCache.List(longhornNamespace, labels.Everything())
 	if err != nil {
 		return fmt.Errorf("failed to list Longhorn Volumes: %w", err)
 	}
@@ -48,7 +66,7 @@ func (h *Handler) reconcileVolumes() error {
 		checks[reason] = buildVolumeCheckResult(healthv1.SeverityWarning, reason, summary.names, getSortedMessages(summary.messages))
 	}
 
-	return h.replaceComponentHealthChecks(volumeComponentHealthName, checks)
+	return c.writer.replaceComponentHealthChecks(volumeComponentHealthName, checks)
 }
 
 func getFalseConditions(volume *longhornv1.Volume) []longhornv1.Condition {

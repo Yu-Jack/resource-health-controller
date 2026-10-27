@@ -1,13 +1,17 @@
 package componenthealth
 
 import (
+	"context"
 	"fmt"
 
+	ctlkubevirtv1 "github.com/harvester/harvester/pkg/generated/controllers/kubevirt.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+	"github.com/harvester/resource-health-controller/pkg/config"
 )
 
 const (
@@ -72,14 +76,28 @@ var vmMigrationHealthChecks = []struct {
 	},
 }
 
+type vmiCheck struct {
+	writer   componentHealthWriter
+	vmiCache ctlkubevirtv1.VirtualMachineInstanceCache
+}
+
+func (c *vmiCheck) name() string { return vmComponentHealthName }
+
 // OnVMIChanged queues a ComponentHealth reconciliation on every VMI change.
-func (h *Handler) OnVMIChanged(_ string, vmi *kubevirtv1.VirtualMachineInstance) (*kubevirtv1.VirtualMachineInstance, error) {
-	h.enqueueHealth(vmComponentHealthName)
+func (c *vmiCheck) OnVMIChanged(_ string, vmi *kubevirtv1.VirtualMachineInstance) (*kubevirtv1.VirtualMachineInstance, error) {
+	c.writer.enqueue(vmComponentHealthName)
 	return vmi, nil
 }
 
-func (h *Handler) reconcileVMI() error {
-	vmis, err := h.vmiCache.List(corev1.NamespaceAll, labels.Everything())
+func registerVMICheck(ctx context.Context, writer componentHealthWriter, management *config.Management) (healthCheck, cache.InformerSynced) {
+	vmis := management.KubeVirtFactory.Kubevirt().V1().VirtualMachineInstance()
+	check := &vmiCheck{writer: writer, vmiCache: vmis.Cache()}
+	vmis.OnChange(ctx, vmiControllerName, check.OnVMIChanged)
+	return check, vmis.Informer().HasSynced
+}
+
+func (c *vmiCheck) reconcile() error {
+	vmis, err := c.vmiCache.List(corev1.NamespaceAll, labels.Everything())
 	if err != nil {
 		return fmt.Errorf("failed to list VirtualMachineInstances: %w", err)
 	}
@@ -93,7 +111,7 @@ func (h *Handler) reconcileVMI() error {
 		checks[entry.Rule.Key] = buildVMCheckResult(entry.Severity, entry.Rule.Message, names)
 	}
 
-	return h.replaceComponentHealthChecks(vmComponentHealthName, checks)
+	return c.writer.replaceComponentHealthChecks(vmComponentHealthName, checks)
 }
 
 func buildVMCheckResult(severity healthv1.Severity, reason string, names []string) healthv1.CheckResult {

@@ -1,15 +1,19 @@
 package componenthealth
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/rancher/wrangler/v3/pkg/condition"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 
 	harvesterv1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	healthv1 "github.com/harvester/resource-health-controller/pkg/apis/health.harvesterhci.io/v1beta1"
+	"github.com/harvester/resource-health-controller/pkg/config"
 )
 
 const (
@@ -25,13 +29,27 @@ const (
 	checkKeyImageBackingImageMissing  = "ImageBackingImageMissing"
 )
 
-func (h *Handler) OnVMImageChanged(_ string, image *harvesterv1.VirtualMachineImage) (*harvesterv1.VirtualMachineImage, error) {
-	h.enqueueHealth(vmImageComponentHealthName)
+type vmImageCheck struct {
+	writer       componentHealthWriter
+	vmImageCache ctlharvesterv1.VirtualMachineImageCache
+}
+
+func (c *vmImageCheck) name() string { return vmImageComponentHealthName }
+
+func (c *vmImageCheck) OnVMImageChanged(_ string, image *harvesterv1.VirtualMachineImage) (*harvesterv1.VirtualMachineImage, error) {
+	c.writer.enqueue(vmImageComponentHealthName)
 	return image, nil
 }
 
-func (h *Handler) reconcileVMImages() error {
-	images, err := h.vmImageCache.List(corev1.NamespaceAll, labels.Everything())
+func registerVMImageCheck(ctx context.Context, writer componentHealthWriter, management *config.Management) (healthCheck, cache.InformerSynced) {
+	vmImages := management.HarvesterFactory.Harvesterhci().V1beta1().VirtualMachineImage()
+	check := &vmImageCheck{writer: writer, vmImageCache: vmImages.Cache()}
+	vmImages.OnChange(ctx, vmImageControllerName, check.OnVMImageChanged)
+	return check, vmImages.Informer().HasSynced
+}
+
+func (c *vmImageCheck) reconcile() error {
+	images, err := c.vmImageCache.List(corev1.NamespaceAll, labels.Everything())
 	if err != nil {
 		return fmt.Errorf("failed to list VirtualMachineImages: %w", err)
 	}
@@ -54,7 +72,7 @@ func (h *Handler) reconcileVMImages() error {
 		check.Message = fmt.Sprintf("%d VirtualMachineImage(s): %s", check.AffectedCount, strings.Join(getSortedMessages(messages[key]), "; "))
 		checks[key] = check
 	}
-	return h.replaceComponentHealthChecks(vmImageComponentHealthName, checks)
+	return c.writer.replaceComponentHealthChecks(vmImageComponentHealthName, checks)
 }
 
 func vmImageFailure(image *harvesterv1.VirtualMachineImage) (string, healthv1.Severity, condition.Cond) {

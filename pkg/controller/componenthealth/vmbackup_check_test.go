@@ -53,12 +53,14 @@ func TestOnVMBackupChangedAfterDeletion(t *testing.T) {
 				}
 			}
 			controller := &recordingComponentHealthController{}
-			handler := &Handler{
-				componentHealthController: controller,
-				componentHealths:          fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-				vmBackupCache:             fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups),
+			handler := &Handler{}
+			writer := componentHealthWriter{
+				controller: controller,
+				client:     fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
 			}
-			_, err := handler.OnVMBackupChanged("default/deleted-backup", backup)
+			backups := &vmBackupCheck{writer: writer, vmBackupCache: fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)}
+			handler.checks = []healthCheck{backups}
+			_, err := backups.OnVMBackupChanged("default/deleted-backup", backup)
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -79,7 +81,7 @@ func TestOnVMBackupChangedAfterDeletion(t *testing.T) {
 			if !assert.NoError(t, err) {
 				return
 			}
-			result, err := handler.OnVMBackupChanged("default/deleted-backup", nil)
+			result, err := backups.OnVMBackupChanged("default/deleted-backup", nil)
 			assert.Nil(t, result)
 			if !assert.NoError(t, err) {
 				return
@@ -156,12 +158,10 @@ func TestReconcileVMBackups(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			clientset, healthset := newTestClients(tc.vmBackup)
-			handler := &Handler{
-				componentHealths: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths),
-				vmBackupCache:    fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups),
-			}
+			writer := componentHealthWriter{client: fakeclients.ComponentHealthClient(healthset.HealthV1beta1().ComponentHealths)}
+			backups := &vmBackupCheck{writer: writer, vmBackupCache: fakeclients.VMBackupCache(clientset.HarvesterhciV1beta1().VirtualMachineBackups)}
 
-			err := handler.reconcileVMBackups()
+			err := backups.reconcile()
 			assert.NoError(t, err)
 
 			componentHealth, err := healthset.HealthV1beta1().ComponentHealths().Get(context.Background(), vmBackupComponentHealthName, metav1.GetOptions{})
