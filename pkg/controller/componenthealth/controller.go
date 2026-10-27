@@ -52,9 +52,6 @@ func Register(ctx context.Context, management *config.Management) error {
 		healthCachesSynced:        []cache.InformerSynced{ignoreRules.Informer().HasSynced},
 	}
 
-	// the only place checks are computed: dispatch by ComponentHealth key
-	componentHealths.OnChange(ctx, "component-health-reconcile", h.OnComponentHealthChanged)
-
 	// resource handlers only enqueue the ComponentHealth key, the workqueue de-duplicates them
 	for _, register := range checkRegistrations {
 		check, synced := register(ctx, writer, management)
@@ -62,6 +59,9 @@ func Register(ctx context.Context, management *config.Management) error {
 		h.healthCachesSynced = append(h.healthCachesSynced, synced)
 	}
 	ignoreRules.OnChange(ctx, ignoreRuleControllerName, h.OnIgnoreRuleChanged)
+
+	// the only place checks are computed: dispatch by ComponentHealth key, registered once h.checks is complete
+	componentHealths.OnChange(ctx, "component-health-reconcile", h.OnComponentHealthChanged)
 
 	// seed every key once caches are synced so checks exist even when no resource changes
 	go h.enqueueInitialHealth(ctx)
