@@ -33,12 +33,19 @@ func (w componentHealthWriter) enqueue(name string) {
 // It skips the write entirely if the resulting checks are unchanged, which is what makes the
 // reconcile loop converge.
 func (w componentHealthWriter) replaceComponentHealthChecks(componentHealthName string, checks map[string]healthv1.CheckResult) error {
-	existing, err := w.client.Get(componentHealthName, metav1.GetOptions{})
+	rules, err := listIgnoreRules(w.ignoreRules, componentHealthName)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to get ComponentHealth %s: %w", componentHealthName, err)
-		}
-		created, err := w.client.Create(&healthv1.ComponentHealth{
+		return fmt.Errorf("failed to list HealthIgnoreRules: %w", err)
+	}
+	updatedChecks, nextExpiry := applyIgnoreRules(checks, rules, time.Now())
+	if nextExpiry != nil {
+		// nothing else triggers a reconcile when a rule expires
+		w.controller.EnqueueAfter(componentHealthName, time.Until(*nextExpiry))
+	}
+
+	existing, err := w.client.Get(componentHealthName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = w.client.Create(&healthv1.ComponentHealth{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: componentHealthName,
 				Labels: map[string]string{
@@ -47,7 +54,7 @@ func (w componentHealthWriter) replaceComponentHealthChecks(componentHealthName 
 			},
 			Status: healthv1.ComponentHealthStatus{
 				LastUpdatedAt: metav1.Now(),
-				Checks:        checks,
+				Checks:        updatedChecks,
 			},
 		})
 		if err != nil {
@@ -58,17 +65,10 @@ func (w componentHealthWriter) replaceComponentHealthChecks(componentHealthName 
 			"component_health": componentHealthName,
 			"checks":           getCheckKeys(checks),
 		}).Info("created ComponentHealth checks")
-		existing = created
+		return nil
 	}
-
-	rules, err := listIgnoreRules(w.ignoreRules, componentHealthName)
 	if err != nil {
-		return fmt.Errorf("failed to list HealthIgnoreRules: %w", err)
-	}
-	updatedChecks, nextExpiry := applyIgnoreRules(checks, rules, time.Now())
-	if nextExpiry != nil {
-		// nothing else triggers a reconcile when a rule expires
-		w.controller.EnqueueAfter(componentHealthName, time.Until(*nextExpiry))
+		return fmt.Errorf("failed to get ComponentHealth %s: %w", componentHealthName, err)
 	}
 
 	if len(existing.Status.Checks) == 0 && len(updatedChecks) == 0 || reflect.DeepEqual(existing.Status.Checks, updatedChecks) {
