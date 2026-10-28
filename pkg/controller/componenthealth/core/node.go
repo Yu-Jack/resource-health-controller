@@ -69,6 +69,11 @@ func (c *nodeCheck) Reconcile() error {
 }
 
 func buildNodeCordonedCheckResult(names []string) healthv1.CheckResult {
-	return healthcheck.NewCheckResult(healthv1.SeverityInfo, fmt.Sprintf("%d Node(s) are cordoned", len(names)),
-		healthcheck.ResourceRef{APIVersion: corev1.SchemeGroupVersion.String(), Kind: nodeKind}, names, nil)
+	return healthcheck.NewCheckResult(healthcheck.CheckResultSpec{
+		Severity:   healthv1.SeverityInfo,
+		Summary:    fmt.Sprintf("%d Node(s) are cordoned", len(names)),
+		APIVersion: corev1.SchemeGroupVersion.String(),
+		Kind:       nodeKind,
+		Names:      names,
+	})
 }

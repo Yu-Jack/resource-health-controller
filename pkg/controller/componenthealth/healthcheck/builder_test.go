@@ -13,10 +13,15 @@ func TestNamespacedName(t *testing.T) {
 }
 
 func TestNewCheckResult(t *testing.T) {
-	ref := ResourceRef{APIVersion: "example.io/v1", Kind: "Example"}
+	newSpec := func(severity healthv1.Severity, summary string) CheckResultSpec {
+		return CheckResultSpec{Severity: severity, Summary: summary, APIVersion: "example.io/v1", Kind: "Example"}
+	}
 
 	t.Run("messages are appended to the summary", func(t *testing.T) {
-		check := NewCheckResult(healthv1.SeverityWarning, "2 Example(s) failed", ref, []string{"a", "b"}, []string{"first", "second"})
+		spec := newSpec(healthv1.SeverityWarning, "2 Example(s) failed")
+		spec.Names = []string{"a", "b"}
+		spec.Messages = []string{"first", "second"}
+		check := NewCheckResult(spec)
 
 		assert.Equal(t, healthv1.SeverityWarning, check.Severity)
 		assert.Equal(t, "2 Example(s) failed: first; second", check.Message)
@@ -27,13 +32,15 @@ func TestNewCheckResult(t *testing.T) {
 	})
 
 	t.Run("summary is the message when there are no messages", func(t *testing.T) {
-		check := NewCheckResult(healthv1.SeverityInfo, "1 Example(s) are cordoned", ref, []string{"a"}, nil)
+		spec := newSpec(healthv1.SeverityInfo, "1 Example(s) are cordoned")
+		spec.Names = []string{"a"}
+		check := NewCheckResult(spec)
 
 		assert.Equal(t, "1 Example(s) are cordoned", check.Message)
 	})
 
 	t.Run("no names gives an empty set", func(t *testing.T) {
-		check := NewCheckResult(healthv1.SeverityInfo, "none", ref, nil, nil)
+		check := NewCheckResult(newSpec(healthv1.SeverityInfo, "none"))
 
 		assert.Equal(t, 0, check.AffectedCount)
 		assert.NotNil(t, check.AffectedResources.Names)

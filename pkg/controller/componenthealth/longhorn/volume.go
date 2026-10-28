@@ -90,6 +90,12 @@ func getFalseConditions(volume *longhornv1.Volume) []longhornv1.Condition {
 }
 
 func buildVolumeCheckResult(severity healthv1.Severity, reason string, names []string, messages []string) healthv1.CheckResult {
-	return healthcheck.NewCheckResult(severity, fmt.Sprintf("%d Longhorn Volume(s) have %s", len(names), reason),
-		healthcheck.ResourceRef{APIVersion: longhornv1.SchemeGroupVersion.String(), Kind: volumeKind}, names, messages)
+	return healthcheck.NewCheckResult(healthcheck.CheckResultSpec{
+		Severity:   severity,
+		Summary:    fmt.Sprintf("%d Longhorn Volume(s) have %s", len(names), reason),
+		APIVersion: longhornv1.SchemeGroupVersion.String(),
+		Kind:       volumeKind,
+		Names:      names,
+		Messages:   messages,
+	})
 }

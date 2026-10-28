@@ -13,31 +13,35 @@ func NamespacedName(namespace, name string) string {
 	return namespace + "/" + name
 }
 
-// ResourceRef identifies the kind of the resources a check reports on.
-type ResourceRef struct {
+// CheckResultSpec describes a CheckResult; Messages is optional.
+type CheckResultSpec struct {
+	Severity   healthv1.Severity
+	Summary    string
 	APIVersion string
 	Kind       string
+	Names      []string
+	Messages   []string
 }
 
 // NewCheckResult builds a CheckResult whose message is "<summary>[: <messages joined by '; '>]".
-func NewCheckResult(severity healthv1.Severity, summary string, ref ResourceRef, names []string, messages []string) healthv1.CheckResult {
-	nameMap := make(map[string]healthv1.AffectedResourceDetail, len(names))
-	for _, name := range names {
+func NewCheckResult(spec CheckResultSpec) healthv1.CheckResult {
+	nameMap := make(map[string]healthv1.AffectedResourceDetail, len(spec.Names))
+	for _, name := range spec.Names {
 		nameMap[name] = healthv1.AffectedResourceDetail{}
 	}
 
-	message := summary
-	if len(messages) > 0 {
-		message = fmt.Sprintf("%s: %s", summary, strings.Join(messages, "; "))
+	message := spec.Summary
+	if len(spec.Messages) > 0 {
+		message = fmt.Sprintf("%s: %s", spec.Summary, strings.Join(spec.Messages, "; "))
 	}
 
 	return healthv1.CheckResult{
-		Severity:      severity,
+		Severity:      spec.Severity,
 		Message:       message,
-		AffectedCount: len(names),
+		AffectedCount: len(spec.Names),
 		AffectedResources: &healthv1.AffectedResources{
-			APIVersion: ref.APIVersion,
-			Kind:       ref.Kind,
+			APIVersion: spec.APIVersion,
+			Kind:       spec.Kind,
 			Names:      nameMap,
 		},
 	}

@@ -104,6 +104,12 @@ func volumeBackupCreatedAfter(a, b *harvesterv1.VolumeBackup) bool {
 }
 
 func buildVMBackupCheckResult(names []string, messages []string) healthv1.CheckResult {
-	return healthcheck.NewCheckResult(healthv1.SeverityError, fmt.Sprintf("%d VirtualMachineBackup(s) failed", len(names)),
-		healthcheck.ResourceRef{APIVersion: harvesterv1.SchemeGroupVersion.String(), Kind: vmBackupKind}, names, messages)
+	return healthcheck.NewCheckResult(healthcheck.CheckResultSpec{
+		Severity:   healthv1.SeverityError,
+		Summary:    fmt.Sprintf("%d VirtualMachineBackup(s) failed", len(names)),
+		APIVersion: harvesterv1.SchemeGroupVersion.String(),
+		Kind:       vmBackupKind,
+		Names:      names,
+		Messages:   messages,
+	})
 }

@@ -80,6 +80,12 @@ func getTrueConditions(scheduleVMBackup *harvesterv1.ScheduleVMBackup) []harvest
 }
 
 func buildScheduleVMBackupCheckResult(reason string, names []string, messages []string) healthv1.CheckResult {
-	return healthcheck.NewCheckResult(healthv1.SeverityError, fmt.Sprintf("%d ScheduleVMBackup(s) have %s", len(names), reason),
-		healthcheck.ResourceRef{APIVersion: harvesterv1.SchemeGroupVersion.String(), Kind: scheduleVMBackupKind}, names, messages)
+	return healthcheck.NewCheckResult(healthcheck.CheckResultSpec{
+		Severity:   healthv1.SeverityError,
+		Summary:    fmt.Sprintf("%d ScheduleVMBackup(s) have %s", len(names), reason),
+		APIVersion: harvesterv1.SchemeGroupVersion.String(),
+		Kind:       scheduleVMBackupKind,
+		Names:      names,
+		Messages:   messages,
+	})
 }

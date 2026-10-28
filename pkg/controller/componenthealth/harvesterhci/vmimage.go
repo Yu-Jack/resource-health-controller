@@ -79,8 +79,14 @@ func (c *vmImageCheck) Reconcile() error {
 
 	checks := map[string]healthv1.CheckResult{}
 	for key, group := range groups {
-		checks[key] = healthcheck.NewCheckResult(severities[key], fmt.Sprintf("%d VirtualMachineImage(s)", len(group.Names)),
-			healthcheck.ResourceRef{APIVersion: harvesterv1.SchemeGroupVersion.String(), Kind: vmImageKind}, group.Names, healthcheck.SortedMessages(group.Messages))
+		checks[key] = healthcheck.NewCheckResult(healthcheck.CheckResultSpec{
+			Severity:   severities[key],
+			Summary:    fmt.Sprintf("%d VirtualMachineImage(s)", len(group.Names)),
+			APIVersion: harvesterv1.SchemeGroupVersion.String(),
+			Kind:       vmImageKind,
+			Names:      group.Names,
+			Messages:   healthcheck.SortedMessages(group.Messages),
+		})
 	}
 	return c.writer.ReplaceComponentHealthChecks(vmImageComponentHealthName, checks)
 }

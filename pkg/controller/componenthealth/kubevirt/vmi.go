@@ -124,7 +124,12 @@ func (c *vmiCheck) Reconcile() error {
 }
 
 func buildVMCheckResult(severity healthv1.Severity, reason string, names []string) healthv1.CheckResult {
-	return healthcheck.NewCheckResult(severity, fmt.Sprintf("%d VM(s) cannot be live migrated", len(names)),
-		healthcheck.ResourceRef{APIVersion: kubevirtv1.SchemeGroupVersion.String(), Kind: kubevirtv1.VirtualMachineGroupVersionKind.Kind},
-		names, []string{reason})
+	return healthcheck.NewCheckResult(healthcheck.CheckResultSpec{
+		Severity:   severity,
+		Summary:    fmt.Sprintf("%d VM(s) cannot be live migrated", len(names)),
+		APIVersion: kubevirtv1.SchemeGroupVersion.String(),
+		Kind:       kubevirtv1.VirtualMachineGroupVersionKind.Kind,
+		Names:      names,
+		Messages:   []string{reason},
+	})
 }
