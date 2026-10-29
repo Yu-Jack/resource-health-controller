@@ -36,6 +36,7 @@ Current checks:
 | `harvester-controller-vmbackup` | `VirtualMachineBackup` | `VMBackupFailed` |
 | `harvester-controller-schedulevmbackup` | `ScheduleVMBackup` | condition reasons |
 | `harvester-controller-vmimage` | `VirtualMachineImage` | `Image*` reasons |
+| `harvester-controller-upgrade` | `Upgrade` | `Upgrade*` reasons, one per false condition |
 
 ## Ignoring checks
 
