@@ -34,6 +34,7 @@ var componentHealthNames = []string{
 	"harvester-controller-addon",
 	"harvester-controller-supportbundle",
 	"harvester-controller-upgradelog",
+	"harvester-controller-setting",
 }
 
 const (
@@ -54,6 +55,7 @@ func newTestHealthChecks(writer healthcheck.Writer) []healthcheck.Check {
 		harvesterhci.NewAddonCheck(writer, nil),
 		harvesterhci.NewSupportBundleCheck(writer, nil),
 		harvesterhci.NewUpgradeLogCheck(writer, nil),
+		harvesterhci.NewSettingCheck(writer, nil),
 	}
 }
 
@@ -132,6 +134,7 @@ func TestOnComponentHealthChangedDispatch(t *testing.T) {
 				harvesterhci.NewAddonCheck(writer, fakeclients.AddonCache(clientset.HarvesterhciV1beta1().Addons)),
 				harvesterhci.NewSupportBundleCheck(writer, fakeclients.SupportBundleCache(clientset.HarvesterhciV1beta1().SupportBundles)),
 				harvesterhci.NewUpgradeLogCheck(writer, fakeclients.UpgradeLogCache(clientset.HarvesterhciV1beta1().UpgradeLogs)),
+				harvesterhci.NewSettingCheck(writer, fakeclients.SettingCache(clientset.HarvesterhciV1beta1().Settings)),
 			}
 			result, err := handler.OnComponentHealthChanged(name, nil)
 			assert.Nil(t, result)

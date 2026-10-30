@@ -40,6 +40,7 @@ Current checks:
 | `harvester-controller-addon` | `Addon` | `AddonOperationFailed` while the last enable, disable or update operation failed |
 | `harvester-controller-supportbundle` | `SupportBundle` | `SupportBundleFailed` while the bundle is in the error state |
 | `harvester-controller-upgradelog` | `UpgradeLog` | `UpgradeLog*` warnings, one per false logging condition |
+| `harvester-controller-setting` | `Setting` | `SettingNotConfigured` while the configured condition is false |
 
 ## Ignoring checks
 
