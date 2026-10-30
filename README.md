@@ -38,6 +38,7 @@ Current checks:
 | `harvester-controller-vmimage` | `VirtualMachineImage` | `Image*` reasons |
 | `harvester-controller-upgrade` | `Upgrade` | `Upgrade*` reasons, one per false condition |
 | `harvester-controller-addon` | `Addon` | `AddonOperationFailed` while the last enable, disable or update operation failed |
+| `harvester-controller-supportbundle` | `SupportBundle` | `SupportBundleFailed` while the bundle is in the error state |
 
 ## Ignoring checks
 

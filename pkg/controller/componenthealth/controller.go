@@ -26,6 +26,7 @@ var registrations = []healthcheck.Registration{
 	harvesterhci.RegisterVMImageCheck,
 	harvesterhci.RegisterUpgradeCheck,
 	harvesterhci.RegisterAddonCheck,
+	harvesterhci.RegisterSupportBundleCheck,
 }
 
 // Handler dispatches ComponentHealth keys to the check that owns them.
