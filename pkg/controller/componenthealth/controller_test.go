@@ -31,6 +31,7 @@ var componentHealthNames = []string{
 	"harvester-controller-schedulevmbackup",
 	"harvester-controller-vmimage",
 	"harvester-controller-upgrade",
+	"harvester-controller-addon",
 }
 
 const (
@@ -48,6 +49,7 @@ func newTestHealthChecks(writer healthcheck.Writer) []healthcheck.Check {
 		harvesterhci.NewScheduleVMBackupCheck(writer, nil),
 		harvesterhci.NewVMImageCheck(writer, nil),
 		harvesterhci.NewUpgradeCheck(writer, nil),
+		harvesterhci.NewAddonCheck(writer, nil),
 	}
 }
 
@@ -123,6 +125,7 @@ func TestOnComponentHealthChangedDispatch(t *testing.T) {
 				harvesterhci.NewScheduleVMBackupCheck(writer, fakeclients.SVMBackupCache(clientset.HarvesterhciV1beta1().ScheduleVMBackups)),
 				harvesterhci.NewVMImageCheck(writer, fakeclients.VirtualMachineImageCache(clientset.HarvesterhciV1beta1().VirtualMachineImages)),
 				harvesterhci.NewUpgradeCheck(writer, fakeclients.UpgradeCache(clientset.HarvesterhciV1beta1().Upgrades)),
+				harvesterhci.NewAddonCheck(writer, fakeclients.AddonCache(clientset.HarvesterhciV1beta1().Addons)),
 			}
 			result, err := handler.OnComponentHealthChanged(name, nil)
 			assert.Nil(t, result)

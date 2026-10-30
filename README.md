@@ -37,6 +37,7 @@ Current checks:
 | `harvester-controller-schedulevmbackup` | `ScheduleVMBackup` | condition reasons |
 | `harvester-controller-vmimage` | `VirtualMachineImage` | `Image*` reasons |
 | `harvester-controller-upgrade` | `Upgrade` | `Upgrade*` reasons, one per false condition |
+| `harvester-controller-addon` | `Addon` | `AddonOperationFailed` while the last enable, disable or update operation failed |
 
 ## Ignoring checks
 
