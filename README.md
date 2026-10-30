@@ -41,6 +41,7 @@ Current checks:
 | `harvester-controller-supportbundle` | `SupportBundle` | `SupportBundleFailed` while the bundle is in the error state |
 | `harvester-controller-upgradelog` | `UpgradeLog` | `UpgradeLog*` warnings, one per false logging condition |
 | `harvester-controller-setting` | `Setting` | `SettingNotConfigured` while the configured condition is false |
+| `harvester-controller-volumeremotebackup` | `VolumeRemoteBackup` | `VolumeRemoteBackupFailed` while the Ready condition is false for a reason other than the operation being in progress |
 
 ## Ignoring checks
 
