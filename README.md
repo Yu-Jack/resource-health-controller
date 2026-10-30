@@ -42,6 +42,7 @@ Current checks:
 | `harvester-controller-upgradelog` | `UpgradeLog` | `UpgradeLog*` warnings, one per false logging condition |
 | `harvester-controller-setting` | `Setting` | `SettingNotConfigured` while the configured condition is false |
 | `harvester-controller-volumeremotebackup` | `VolumeRemoteBackup` | `VolumeRemoteBackupFailed` while the Ready condition is false for a reason other than the operation being in progress |
+| `harvester-controller-volumeremoterestore` | `VolumeRemoteRestore` | `VolumeRemoteRestoreFailed` while the Ready condition is false for a reason other than the operation being in progress |
 
 ## Ignoring checks
 

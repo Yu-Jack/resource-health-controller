@@ -36,6 +36,7 @@ var componentHealthNames = []string{
 	"harvester-controller-upgradelog",
 	"harvester-controller-setting",
 	"harvester-controller-volumeremotebackup",
+	"harvester-controller-volumeremoterestore",
 }
 
 const (
@@ -58,6 +59,7 @@ func newTestHealthChecks(writer healthcheck.Writer) []healthcheck.Check {
 		harvesterhci.NewUpgradeLogCheck(writer, nil),
 		harvesterhci.NewSettingCheck(writer, nil),
 		harvesterhci.NewVolumeRemoteBackupCheck(writer, nil),
+		harvesterhci.NewVolumeRemoteRestoreCheck(writer, nil),
 	}
 }
 
@@ -138,6 +140,7 @@ func TestOnComponentHealthChangedDispatch(t *testing.T) {
 				harvesterhci.NewUpgradeLogCheck(writer, fakeclients.UpgradeLogCache(clientset.HarvesterhciV1beta1().UpgradeLogs)),
 				harvesterhci.NewSettingCheck(writer, fakeclients.SettingCache(clientset.HarvesterhciV1beta1().Settings)),
 				harvesterhci.NewVolumeRemoteBackupCheck(writer, fakeclients.VolumeRemoteBackupCache(clientset.HarvesterhciV1beta1().VolumeRemoteBackups)),
+				harvesterhci.NewVolumeRemoteRestoreCheck(writer, fakeclients.VolumeRemoteRestoreCache(clientset.HarvesterhciV1beta1().VolumeRemoteRestores)),
 			}
 			result, err := handler.OnComponentHealthChanged(name, nil)
 			assert.Nil(t, result)
